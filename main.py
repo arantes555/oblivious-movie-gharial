@@ -46,6 +46,7 @@ def main():
 
     files_list = list_files('./reviews_dataset')
     documents_tried = 0
+    documents_normal = 0
     documents_success = 0
 
     for file_name in files_list[:500]:
@@ -55,11 +56,16 @@ def main():
                 data = file.read()
                 doc = ReviewParser.parse(data)
                 bank.add_documents([doc])
-                documents_success += 1
+                documents_normal += 1
+                if doc['rating'] != '?':
+                    documents_success += 1
             except Exception as e:
                 logging.warning('Failed on ' + file_name + ' : ' + str(e))
 
-    logging.info('Tried ' + str(documents_tried) + ' documents, succeeded ' + str(documents_success) + '.')
+    logging.info('Tried ' + str(documents_tried) + ' documents, succeeded ' +
+                 str(documents_normal) + ' (' + str(documents_normal/documents_tried*100) +
+                 '%), succeded with ratings ' + str(documents_success) + ' ('
+                 + str(documents_success/documents_tried*100) + '%).')
     bank.vectorize()
     bank.close()
 
