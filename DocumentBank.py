@@ -48,21 +48,21 @@ class DocumentBank:
     def vectorize(self):
         self.shelf['vectorized_documents'] = CountVectorizer(decode_error='ignore',
                                                              strip_accents='unicode',
-                                                             min_df=4,
+                                                             min_df=0.02,
                                                              max_df=0.98,
                                                              stop_words=self.shelf['stop_words'],
                                                              max_features=self.max_words)
 
         def corpus():
             for document in list(self.shelf['documents']):
-                yield document['content']
+                yield document['review']
 
         features_matrix = self.shelf['vectorized_documents'].fit_transform(corpus())
 
         self.shelf['features_matrix'] = features_matrix
 
         # Inverse the vectorized vocabulary
-        self.shelf.data['dictionnary'] = self.shelf.data['vectorized_documents'].get_feature_names()
+        self.shelf['dictionnary'] = self.shelf['vectorized_documents'].get_feature_names()
         self.shelf.sync()
 
     def close(self):
