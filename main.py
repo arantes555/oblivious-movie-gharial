@@ -37,7 +37,8 @@ def main():
     success = 0
     failed = 0
     partial_success = 0
-    for file_name in os.listdir(reviews_dir)[:500]:
+    logging.info('Starting to parse reviews')
+    for file_name in os.listdir(reviews_dir):
         with open(os.path.join(reviews_dir, file_name)) as file:
             try:
                 doc = ReviewParser.parse(file.read())
