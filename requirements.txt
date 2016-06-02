@@ -1,0 +1,4 @@
+couchdbkit==0.6.5
+http-parser==0.8.3
+restkit==4.2.2
+socketpool==0.5.3
