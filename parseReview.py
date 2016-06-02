@@ -33,9 +33,7 @@ class ReviewParser(HTMLParser):
                 self._inH1 = True
             elif tag == 'h3':
                 self._inH3 = True
-            elif tag == 'pre' and self._gotHeader:
-                self._gotFooter = True
-            elif tag == 'p' and self._gotHeader and not self._gotFooter:
+            elif self._gotHeader and not self._gotFooter:
                 self._inReview = True
 
     def handle_endtag(self, tag):
@@ -48,6 +46,8 @@ class ReviewParser(HTMLParser):
                 self._inH3 = False
             elif tag == 'pre' and not self._gotHeader:
                 self._gotHeader = True
+            elif tag == 'pre' and self._gotHeader:
+                self._gotFooter = True
             elif tag == 'p' and self._gotHeader and not self._gotFooter:
                 self._inReview = False
 
@@ -65,9 +65,12 @@ class ReviewParser(HTMLParser):
                     self.review += data + '\n'
 
     def parse_review(self):
-        split_rating = re.split('[\\w\\s]+([\\-\\+][0-4]) on the \\-4 to \\+4 scale\\.', self.review)
+        split_rating = re.split('[\\w\\s]+([\\-\\+]?[0-4])[\\w\\s]+\\-4 to \\+4', self.review)
         self.review = split_rating[0]
-        self.rating = split_rating[1]
+        try:
+            self.rating = split_rating[1]
+        except IndexError:
+            self.rating = '?'
         return {
             'movie': self.title,
             'reviewer': self.reviewer,

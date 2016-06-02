@@ -48,18 +48,18 @@ def main():
     documents_tried = 0
     documents_success = 0
 
-    for file_name in files_list:
+    for file_name in files_list[:500]:
         documents_tried += 1
-        print('Trying : ', file_name)
         with open('./reviews_dataset/' + file_name) as file:
             try:
                 data = file.read()
                 doc = ReviewParser.parse(data)
                 bank.add_documents([doc])
                 documents_success += 1
-            except:
-                pass
+            except Exception as e:
+                logging.warning('Failed on ' + file_name + ' : ' + str(e))
 
+    logging.info('Tried ' + str(documents_tried) + ' documents, succeeded ' + str(documents_success) + '.')
     bank.vectorize()
     bank.close()
 
