@@ -29,6 +29,7 @@ def initialize_logger(output_dir):
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
+
 def main():
     initialize_logger('.')
     bank = DocumentBank.DocumentBank()
@@ -38,8 +39,8 @@ def main():
     failed = 0
     partial_success = 0
     logging.info('Starting to parse reviews')
-    for file_name in os.listdir(reviews_dir):
-        with open(os.path.join(reviews_dir, file_name)) as file:
+    for file_name in os.listdir(reviews_dir)[:50]:
+        with open(os.path.join(reviews_dir, file_name), encoding='latin-1') as file:
             try:
                 doc = ReviewParser.parse(file.read())
                 bank.add_document(doc['review'], {
@@ -56,11 +57,11 @@ def main():
                 failed += 1
                 logging.debug('Failed on %s : %s' % (file_name, str(e)))
 
-    logging.info('Tried %i documents, succeeded %i (%i per cent of partial success). Success rate: %i per cent' %
+    logging.info('Tried %i documents. Succeeded %i%% (%i%% of partial success). Failed: %i' %
                  (int(success + partial_success + failed),
-                  int(success + partial_success),
+                  int((success + partial_success) / (success + partial_success + failed) * 100),
                   int(partial_success / (success + partial_success) * 100),
-                  int((success + partial_success) / (success + partial_success + failed) * 100)))
+                  int(failed)))
     bank.vectorize()
     bank.close()
 
