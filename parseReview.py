@@ -1,9 +1,12 @@
-from HTMLParser import HTMLParser
+from html.parser import HTMLParser
 import re
 
 
 # create a subclass and override the handler methods
 class ReviewParser(HTMLParser):
+    def error(self, message):
+        pass
+
     def __init__(self):
         self.title = ''
         self.reviewer = ''
@@ -20,7 +23,7 @@ class ReviewParser(HTMLParser):
         self._gotHeader = False
         self._gotFooter = False
 
-        HTMLParser.__init__(self)
+        super().__init__()
 
     def handle_starttag(self, tag, attrs):
         if tag == 'body':
@@ -148,8 +151,8 @@ to ASCII to HTML conversion.
 
 myReview = ReviewParser.parse(myReviewHtml)
 
-print 'Movie : ', myReview['movie']
-print 'Reviewer : ', myReview['reviewer']
-print 'Review : ', myReview['review']
-print 'Capsule Review :', myReview['capsule_review']
-print 'Rating : ', myReview['rating']
+print('Movie : ', myReview['movie'])
+print('Reviewer : ', myReview['reviewer'])
+print('Review : ', myReview['review'])
+print('Capsule Review :', myReview['capsule_review'])
+print('Rating : ', myReview['rating'])
