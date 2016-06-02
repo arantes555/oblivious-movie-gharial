@@ -1,12 +1,15 @@
 import shelve
 import os
+import logging
+from sklearn.feature_extraction.text import CountVectorizer
 
 
 class DocumentBank:
     """
     DocumentBank manages the documents and operates the ML on it
     """
-    def __init__(self, shelf_path, documents=None):
+
+    def __init__(self, shelf_path, documents=None, stop_words=None, max_words=2000):
         """
         :param shelf_path: location of the db
         :type shelf_path: str
@@ -14,13 +17,23 @@ class DocumentBank:
         :type documents: list
         """
         self.path = shelf_path
-        if documents is not None and len(documents) != 0:
+        self.max_words = max_words
+        if documents is not None:
+            logging.info('documents were provided, removing database if any')
             os.remove(shelf_path)
-            self.shelf = shelve.open(self.path)
+            self.shelf = shelve.open(self.path, writeback=True)
             self.shelf['documents'] = documents
         else:
-            self.shelf = shelve.open(self.path)
+            logging.info("no documents were provided, loading database")
+            self.shelf = shelve.open(self.path, writeback=True)
             self.shelf['documents'] = []
+
+        if stop_words is not None:
+            self.shelf['stop_words'] = stop_words
+        else:
+            self.shelf['stop_words'] = []
+
+        self.shelf.sync()
 
     def add_documents(self, documents):
         """
@@ -28,11 +41,39 @@ class DocumentBank:
         :param documents: documents to add
         :type documents: list
         """
+        logging.debug("adding specified documents to database")
         self.shelf['documents'].extend(documents)
+        self.shelf.sync()
+
+    def vectorize(self):
+
+        self.shelf['vectorized_documents'] = CountVectorizer(decode_error='ignore',
+                                                             strip_accents='unicode',
+                                                             min_df=4,
+                                                             max_df=0.98,
+                                                             stop_words=self.shelf['stop_words'],
+                                                             max_features=self.max_words)
+
+        def corpus():
+            for document in list(self.shelf['documents']):
+                yield document['content']
+
+        print(list(self.shelf['documents']))
+        features_matrix = self.shelf['vectorized_documents'].fit_transform(corpus())
+
+        self.shelf['features_matrix'] = features_matrix
+        # TODO : Get TF-IDF matrix
+        # matout = text.TfidfTransformer().fit_transform(dataM)
+        # Use frequency matrix (no update issues)
+        # matout = data_m
+
+        # Inverse the vectorized vocabulary
+        self.shelf.data['dictionnary'] = self.shelf.data['vectorized_documents'].get_feature_names()
         self.shelf.sync()
 
     def close(self):
         """
         Closes the DocumentBank
         """
+        logging.info("Closing bank")
         self.shelf.close()
