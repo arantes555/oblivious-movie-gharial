@@ -1,0 +1,1 @@
+MAX_REVIEWS = 500

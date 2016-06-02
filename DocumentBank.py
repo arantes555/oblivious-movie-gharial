@@ -1,10 +1,10 @@
 import shelve
-import os
 import logging
 from sklearn.feature_extraction.text import CountVectorizer
 from tinydb import TinyDB
 from tinydb.storages import JSONStorage
 from tinydb.middlewares import CachingMiddleware
+import utils
 
 
 class DocumentBank:
@@ -17,10 +17,8 @@ class DocumentBank:
                  tinydb_path='./documents.tinydb',
                  reset=True):
         if reset:
-            if os.path.isfile(shelf_path):
-                os.remove(shelf_path)
-            if os.path.isfile(tinydb_path):
-                os.remove(tinydb_path)
+            utils.safe_remove(shelf_path)
+            utils.safe_remove(tinydb_path)
 
         self.shelf = shelve.open(shelf_path, writeback=True)
         self.tinydb = TinyDB(tinydb_path, storage=CachingMiddleware(JSONStorage))
