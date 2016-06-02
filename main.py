@@ -1,6 +1,7 @@
 import logging
 from DocumentBank import DocumentBank
 from parseReview import ReviewParser
+from time import time
 import os
 import logger
 import config
@@ -15,6 +16,7 @@ def main():
     failed = 0
     partial_success = 0
     logging.info('Starting to parse reviews')
+    t0 = time()
     for file_name in os.listdir(reviews_dir)[:config.MAX_REVIEWS]:
         with open(os.path.join(reviews_dir, file_name), encoding='latin-1') as file:
             try:
@@ -33,11 +35,11 @@ def main():
                 failed += 1
                 logging.debug('Failed on %s : %s' % (file_name, str(e)))
 
-    logging.info('Tried %i documents. Succeeded %i%% (%i%% of partial success). Failed: %i' %
+    logging.info('Tried %i documents, %i%% of partial success, %i failed, in %is.' %
                  (int(success + partial_success + failed),
-                  int((success + partial_success) / (success + partial_success + failed) * 100),
                   int(partial_success / (success + partial_success) * 100),
-                  int(failed)))
+                  int(failed),
+                  int(time() - t0)))
     bank.vectorize()
     bank.close()
 
