@@ -46,7 +46,6 @@ class DocumentBank:
         self.shelf.sync()
 
     def vectorize(self):
-
         self.shelf['vectorized_documents'] = CountVectorizer(decode_error='ignore',
                                                              strip_accents='unicode',
                                                              min_df=4,
@@ -58,14 +57,9 @@ class DocumentBank:
             for document in list(self.shelf['documents']):
                 yield document['content']
 
-        print(list(self.shelf['documents']))
         features_matrix = self.shelf['vectorized_documents'].fit_transform(corpus())
 
         self.shelf['features_matrix'] = features_matrix
-        # TODO : Get TF-IDF matrix
-        # matout = text.TfidfTransformer().fit_transform(dataM)
-        # Use frequency matrix (no update issues)
-        # matout = data_m
 
         # Inverse the vectorized vocabulary
         self.shelf.data['dictionnary'] = self.shelf.data['vectorized_documents'].get_feature_names()
