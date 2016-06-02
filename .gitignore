@@ -1,7 +1,9 @@
 # Custom
 polarity_html.zip
-reviews_dataset
-
+reviews_dataset/
+.idea/
+*.tinydb
+*.shelf
 # Byte-compiled / optimized / DLL files
 __pycache__rm/
 *.py[cod]
@@ -64,6 +66,3 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
-
-.idea/
-*.db

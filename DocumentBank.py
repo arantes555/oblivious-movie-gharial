@@ -2,6 +2,9 @@ import shelve
 import os
 import logging
 from sklearn.feature_extraction.text import CountVectorizer
+from tinydb import TinyDB
+from tinydb.storages import JSONStorage
+from tinydb.middlewares import CachingMiddleware
 
 
 class DocumentBank:
@@ -9,53 +12,32 @@ class DocumentBank:
     DocumentBank manages the documents and operates the ML on it
     """
 
-    def __init__(self, shelf_path, documents=None, stop_words=None, max_words=2000):
-        """
-        :param shelf_path: location of the db
-        :type shelf_path: str
-        :param documents: documents to add, None by default
-        :type documents: list
-        """
-        self.path = shelf_path
-        self.max_words = max_words
-        if documents is not None:
-            logging.info('documents were provided, removing database if any')
-            os.remove(shelf_path)
-            self.shelf = shelve.open(self.path, writeback=True)
-            self.shelf['documents'] = documents
-        else:
-            logging.info("no documents were provided, loading database")
-            self.shelf = shelve.open(self.path, writeback=True)
-            self.shelf['documents'] = []
+    def __init__(self,
+                 shelf_path='./bank.shelf',
+                 tinydb_path='./documents.tinydb',
+                 reset=True):
+        if reset:
+            if os.path.isfile(shelf_path):
+                os.remove(shelf_path)
+            if os.path.isfile(tinydb_path):
+                os.remove(tinydb_path)
 
-        if stop_words is not None:
-            self.shelf['stop_words'] = stop_words
-        else:
-            self.shelf['stop_words'] = []
+        self.shelf = shelve.open(shelf_path, writeback=True)
+        self.tinydb = TinyDB(tinydb_path, storage=CachingMiddleware(JSONStorage))
 
-        self.shelf.sync()
-
-    def add_documents(self, documents):
-        """
-        Add documents to the DocumentsBank
-        :param documents: documents to add
-        :type documents: list
-        """
-        logging.debug("adding specified documents to database")
-        self.shelf['documents'].extend(documents)
-        self.shelf.sync()
+    def add_document(self, document_content, document_metadata):
+        self.tinydb.insert({'content': document_content, 'metadata': document_metadata})
 
     def vectorize(self):
+        logging.info('Starting vectorizing...')
         self.shelf['vectorized_documents'] = CountVectorizer(decode_error='ignore',
                                                              strip_accents='unicode',
                                                              min_df=0.02,
-                                                             max_df=0.98,
-                                                             stop_words=self.shelf['stop_words'],
-                                                             max_features=self.max_words)
+                                                             max_df=0.98)
 
         def corpus():
-            for document in list(self.shelf['documents']):
-                yield document['review']
+            for document in self.tinydb.all():
+                yield document['content']
 
         features_matrix = self.shelf['vectorized_documents'].fit_transform(corpus())
 
@@ -63,6 +45,7 @@ class DocumentBank:
 
         # Inverse the vectorized vocabulary
         self.shelf['dictionnary'] = self.shelf['vectorized_documents'].get_feature_names()
+        logging.info('Vectorizing done')
         self.shelf.sync()
 
     def close(self):
@@ -71,3 +54,4 @@ class DocumentBank:
         """
         logging.info("Closing bank")
         self.shelf.close()
+        self.tinydb.close()

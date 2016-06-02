@@ -29,43 +29,37 @@ def initialize_logger(output_dir):
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-
-def list_files(path):
-    # returns a list of names (with extension, without full path) of all files
-    # in folder path
-    files = []
-    for name in os.listdir(path):
-        if os.path.isfile(os.path.join(path, name)):
-            files.append(name)
-    return files
-
-
 def main():
     initialize_logger('.')
-    bank = DocumentBank.DocumentBank('./test.db')
+    bank = DocumentBank.DocumentBank()
 
-    files_list = list_files('./reviews_dataset')
-    documents_tried = 0
-    documents_normal = 0
-    documents_success = 0
-
-    for file_name in files_list[:500]:
-        documents_tried += 1
-        with open('./reviews_dataset/' + file_name) as file:
+    reviews_dir = './reviews_dataset/'
+    success = 0
+    failed = 0
+    partial_success = 0
+    for file_name in os.listdir(reviews_dir)[:500]:
+        with open(os.path.join(reviews_dir, file_name)) as file:
             try:
-                data = file.read()
-                doc = ReviewParser.parse(data)
-                bank.add_documents([doc])
-                documents_normal += 1
+                doc = ReviewParser.parse(file.read())
+                bank.add_document(doc['review'], {
+                    'rating': doc['rating'],
+                    'title': doc['movie'],
+                    'author': doc['reviewer'],
+                    'capsule_review': doc['capsule_review']
+                })
                 if doc['rating'] != '?':
-                    documents_success += 1
+                    success += 1
+                else:
+                    partial_success += 1
             except Exception as e:
-                logging.warning('Failed on ' + file_name + ' : ' + str(e))
+                failed += 1
+                logging.debug('Failed on %s : %s' % (file_name, str(e)))
 
-    logging.info('Tried ' + str(documents_tried) + ' documents, succeeded ' +
-                 str(documents_normal) + ' (' + str(documents_normal/documents_tried*100) +
-                 '%), succeded with ratings ' + str(documents_success) + ' ('
-                 + str(documents_success/documents_tried*100) + '%).')
+    logging.info('Tried %i documents, succeeded %i (%i per cent of partial success). Success rate: %i per cent' %
+                 (int(success + partial_success + failed),
+                  int(success + partial_success),
+                  int(partial_success / (success + partial_success) * 100),
+                  int((success + partial_success) / (success + partial_success + failed) * 100)))
     bank.vectorize()
     bank.close()
 
