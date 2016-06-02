@@ -11,13 +11,12 @@ def main():
     logger.initialize('.')
     bank = DocumentBank()
 
-    reviews_dir = './reviews_dataset/'
     success = 0
     failed = 0
     partial_success = 0
     logging.info('Starting to parse reviews')
     t0 = time()
-    files_names = os.listdir(reviews_dir)[:config.MAX_REVIEWS]
+    files_names = os.listdir(config.REVIEWS_DIR)[:config.MAX_REVIEWS]
     files_number = len(files_names)
     progress = 0
     for i, file_name in enumerate(files_names):
@@ -25,7 +24,7 @@ def main():
         if new_progress != progress and new_progress % 10 == 0:
             logging.info('Progress: %i%%' % new_progress)
         progress = new_progress
-        with open(os.path.join(reviews_dir, file_name), encoding='latin-1') as file:
+        with open(os.path.join(config.REVIEWS_DIR, file_name), encoding='latin-1') as file:
             try:
                 doc = ReviewParser.parse(file.read())
                 bank.add_document(doc['review'], {
