@@ -70,8 +70,8 @@ def main():
     bank.train_classifiers_fullset()
 
     for doc in reviews_to_classify:
-        print([bank.shelf['topic_names'][label] for label in bank.classify_document(doc['content'])])
-
+        logging.info(str([bank.shelf['topic_names'][label] for label in bank.classify_document(doc['content'])]))
+        logging.info(doc['content'])
     bank.close()
 
 
