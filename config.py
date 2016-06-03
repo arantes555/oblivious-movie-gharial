@@ -6,7 +6,6 @@ HTML_REVIEWS_DIR = './resources/reviews_dataset/'
 
 AMAZON_REVIEWS_FILE = './resources/movies.txt'
 
-STOP_WORDS_PATH = './resources/stopwords/english'
+LANGUAGE_STOP_WORDS_PATH = './resources/stopwords/english'
 
-
-
+PROJECT_STOP_WORDS_PATH = './resources/movies_stopwords'

@@ -57,7 +57,8 @@ def main():
     bank = DocumentBank()
 
     logging.info('Fetching stop words')
-    stop_words = utils.stop_words(config.STOP_WORDS_PATH)
+    stop_words = utils.stop_words(config.LANGUAGE_STOP_WORDS_PATH)
+    stop_words.extend(utils.stop_words(config.PROJECT_STOP_WORDS_PATH))
     logging.info('Fetched %i stop words' % len(stop_words))
 
     append_amazon_review_to_bank(bank, config.AMAZON_REVIEWS_FILE, config.MAX_DOCUMENTS)

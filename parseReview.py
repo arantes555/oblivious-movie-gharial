@@ -93,6 +93,7 @@ class AmazonReviewsParser:
     @staticmethod
     def parse_review(string):
         try:
+            string = string.replace('<br />', ' ')
             parts = [part.split(': ')[1] for part in string.split('\n')[0:8]]
             return {
                 'movie_id': parts[0],
