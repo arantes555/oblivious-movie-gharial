@@ -11,10 +11,7 @@ import sklearn.feature_extraction.text as sktext
 from sklearn.metrics import precision_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.svm import SVC
-from scipy.sparse import csr_matrix, vstack
 from time import time
-import uuid
-import hashlib
 
 with warnings.catch_warnings(record=True) as w:
     from nimfa import Snmf
@@ -33,32 +30,9 @@ class DocumentBank:
         self.tinydb = TinyDB(tinydb_path, storage=CachingMiddleware(JSONStorage))
 
     def add_document(self, document_content, document_metadata):
-        sha1 = hashlib.sha1()
-        sha1.update(bytes(document_content, 'utf-8'))
-        document_id = str(sha1.digest())
-
         labels = []
-        if 'vectorized_documents' in self.shelf and \
-           'features_matrix' in self.shelf and \
-           'classifiers' in self.shelf:
-            # Tokenize body
-            vecm = self.shelf['vectorized_documents'].transform([document_content]).toarray()
-            # Append vectorized document to features matrix
-            svecm = csr_matrix(vecm)
-            self.shelf['features_matrix'] = vstack((self.shelf['features_matrix'], svecm),
-                                                   format='csr')
-            # Produce label list
 
-            for label in self.shelf['classifiers']:
-                # Use SVC model to classify mail for label l_id
-                resp = self.shelf['classifiers'][label].predict(vecm)
-                if resp > 0:
-                    labels.append(label)
-
-        query = Query()
-        if len(self.tinydb.search(query.id == document_id)) == 0:
-            self.tinydb.insert({
-                'id': document_id,
+        self.tinydb.insert({
                 'metadata': document_metadata,
                 'content': document_content,
                 'labels': labels
@@ -227,6 +201,19 @@ class DocumentBank:
                 print("%0.3f (+/-%0.03f) for %r" % (
                     mean_score, scores.std() / 2, params))
         print('Done...')
+
+    def classify_document(self, content):
+        # Tokenize body
+        vecm = self.shelf['vectorized_documents'].transform([content]).toarray()
+
+        # Produce label list
+        labels = []
+        for label in self.shelf['classifiers']:
+            # Use SVC model to classify mail for label l_id
+            resp = self.shelf['classifiers'][label].predict(vecm)
+            if resp > 0:
+                labels.append(label)
+        return labels
 
     def close(self):
         logging.info("Closing bank")
