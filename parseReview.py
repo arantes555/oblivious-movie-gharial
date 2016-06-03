@@ -102,18 +102,25 @@ def parse_amazon_review(string):
             'review': parts[7]
         }
     except IndexError:
-        print("Couldn't parse review : \n" + string)
+        #print("Couldn't parse review : \n" + string)
         return None
 
 
 def read_reviews_from_file(file, max_reviews=sys.maxsize):
     t0 = time()
+    last_t = t0
     fail = 0
     reviews = []
     temp = ''
     with open(file, encoding='latin-1') as f:
         while len(reviews) < max_reviews:
-            temp += f.read(200)
+            if time() - last_t > 10:
+                last_t = time()
+                print('%i reviews read, %i failed, in %is.' % (len(reviews), fail, last_t - t0))
+            temp2 = f.read(200)
+            if temp2 == '':
+                break
+            temp += temp2
             while '\n\n' in temp:
                 review, temp = temp.split('\n\n', maxsplit=1)
                 review = parse_amazon_review(review)
@@ -121,9 +128,9 @@ def read_reviews_from_file(file, max_reviews=sys.maxsize):
                     reviews.append(review)
                 else:
                     fail += 1
-    print('%i reviews read, %i failed, in %is.' % (len(reviews), fail, time() - t0))
+    print('Done : %i reviews read, %i failed, in %is.' % (len(reviews), fail, time() - t0))
     return reviews
 
 
-x = read_reviews_from_file('./resources/movies.txt', max_reviews=1000000)
+x = read_reviews_from_file('./resources/movies.txt')
 
