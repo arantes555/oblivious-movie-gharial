@@ -1,14 +1,21 @@
 import shelve
 import logging
 from sklearn.feature_extraction.text import CountVectorizer
-from tinydb import TinyDB
+from tinydb import TinyDB, Query
 from tinydb.storages import JSONStorage
 from tinydb.middlewares import CachingMiddleware
 import utils
 import warnings
-from numpy import array, argsort, zeros
+from numpy import argsort, zeros, array
 import sklearn.feature_extraction.text as sktext
+from sklearn.metrics import precision_score
+from sklearn.grid_search import GridSearchCV
+from sklearn.svm import SVC
+from scipy.sparse import csr_matrix, vstack
 from time import time
+import uuid
+import hashlib
+
 with warnings.catch_warnings(record=True) as w:
     from nimfa import Snmf
 
@@ -26,20 +33,49 @@ class DocumentBank:
         self.tinydb = TinyDB(tinydb_path, storage=CachingMiddleware(JSONStorage))
 
     def add_document(self, document_content, document_metadata):
-        self.tinydb.insert({'content': document_content, 'metadata': document_metadata})
+        sha1 = hashlib.sha1()
+        sha1.update(bytes(document_content, 'utf-8'))
+        document_id = str(sha1.digest())
+
+        labels = []
+        if 'vectorized_documents' in self.shelf and \
+           'features_matrix' in self.shelf and \
+           'classifiers' in self.shelf:
+            # Tokenize body
+            vecm = self.shelf['vectorized_documents'].transform([document_content]).toarray()
+            # Append vectorized document to features matrix
+            svecm = csr_matrix(vecm)
+            self.shelf['features_matrix'] = vstack((self.shelf['features_matrix'], svecm),
+                                                   format='csr')
+            # Produce label list
+
+            for label in self.shelf['classifiers']:
+                # Use SVC model to classify mail for label l_id
+                resp = self.shelf['classifiers'][label].predict(vecm)
+                if resp > 0:
+                    labels.append(label)
+
+        query = Query()
+        if len(self.tinydb.search(query.id == document_id)) == 0:
+            self.tinydb.insert({
+                'id': document_id,
+                'metadata': document_metadata,
+                'content': document_content,
+                'labels': labels
+            })
 
     def add_documents(self, documents):
         self.tinydb.insert_multiple(documents)
 
     def vectorize(self, stop_words=None, max_features=2000):
-        logging.info('Starting vectorizing...')
+        logging.info('Start vectorizing...')
         self.shelf['vectorized_documents'] = CountVectorizer(decode_error='ignore',
                                                              strip_accents='unicode',
-                                                             min_df=10,
+                                                             min_df=0.05,
                                                              max_df=0.80,
                                                              stop_words=stop_words,
                                                              max_features=max_features
-        )
+                                                             )
 
         def corpus():
             for document in self.tinydb.all():
@@ -101,7 +137,94 @@ class DocumentBank:
         rbas = fctr.coef().toarray()
         bas = zeros((rbas.shape[0], self.shelf['features_matrix'].shape[1]))
         bas[:, idx] = rbas
-        return bas, fctr_res.basis().toarray()  # Return (H,W) matrix factors
+
+        (H, W) = bas, fctr_res.basis().toarray()
+
+        # Create artificial user folders/labels from NMF topic results
+        # (the Melanion dataset does not have any labels)
+        yv = zeros(W.shape[0])
+        mml = W.mean()
+        for i in range(W.shape[0]):
+            yv[i] = W[i].argmax()
+            if W[i][int(yv[i])] < mml:
+                yv[i] = -1  # Assign label -1 to poorly categorized mails
+
+        for document in self.tinydb.all():
+            self.tinydb.update({'labels': [yv[document.eid - 1]]}, eids=[document.eid])
+        return H, W  # Return (H,W) matrix factors
+
+    def train_classifiers_fullset(self):
+        """
+        Compute classifiers for full email set, overwrites existing classifiers.
+        Uses list of all unique labels computed from self.mail_db.data['labels']
+        """
+        logging.info('Start training classifiers')
+        # Get list of labels from email versus label dict
+        labels = dict([(label, []) for document in self.tinydb.all() for label in document['labels']])
+        logging.info('Dict of labels computed with size %i' % len(list(labels.keys())))
+        # Compute classifier for each label (except -1, which is no label)
+        self.shelf['classifiers'] = {}
+        for label in labels.keys():
+            logging.info('Working on label %s' % str(label))
+            if not label == -1.0:  # TODO : Separate in multiple functions ...
+                yvc = self._generate_yvc(label)
+                logging.info('generated YVC')
+                # Check if enough positives
+                length = len(yvc)
+                total = sum(yvc)
+                if total > -length + 20:  # TODO : "-len(yvc) + 20" ? Oo
+                    logging.info('Respects strange condition')
+                    # Launch classifier on feature matrix
+                    ratio = (length - total) / (length + total)
+                    self._classify(label, yvc, ratio)
+
+    def _generate_yvc(self, label):
+        """
+        Helper method for "train_classifiers_fullset". Should not be used directly.
+        Parameters
+        ----------
+        l_id: float
+            ID of the Label for which to compute the yvc.
+        """
+        yvc = []
+        # Scan each message in msg_id list (ordered as in DataM)
+        for document in self.tinydb.all():
+            if label in document['labels']:
+                yvc.append(1)
+            else:
+                yvc.append(-1)
+        return yvc
+
+    def _classify(self, l_id, yvc, ratio):
+        """
+        Helper method for "train_classifiers_fullset". Should not be used directly.
+        Parameters
+        ----------
+        l_id: float
+            ID of the current Label.
+        yvc: list
+            Vector to classify.
+        ratio: float
+            Ratio of the yvc.
+        """
+        param_grid = [{'C': [0.1, 1, 10, 100], 'kernel': ['linear']}]
+        scores = [('precision', precision_score)]  # TODO: refine SVM scores
+        clf = GridSearchCV(SVC(C=1, class_weight={1: ratio}), param_grid, cv=5)
+        clf.fit(self.shelf['features_matrix'], array(yvc))
+        # clf = GridSearchCV(SVC(C=1,class_weight={1:ratio}), param_grid)
+        # clf.fit(self.mail_db.features_matrix, array(yvc), cv=5)
+        # Store best classifier in dict
+        self.shelf['classifiers'][l_id] = clf.best_estimator_
+        # Report results
+        for score_name, score_func in scores:
+            print(19 * '=' + ' Grid search on ' + score_name + 19 * '=')
+            print("Best parameters set found on development set:")
+            print(clf.best_estimator_)
+            print("Grid scores on training set:")
+            for params, mean_score, scores in clf.grid_scores_:
+                print("%0.3f (+/-%0.03f) for %r" % (
+                    mean_score, scores.std() / 2, params))
+        print('Done...')
 
     def close(self):
         logging.info("Closing bank")

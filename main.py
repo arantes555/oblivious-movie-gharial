@@ -70,6 +70,9 @@ def main():
     for topic_idx, topic in enumerate(H):
         topbuf = " ".join([bank.shelf['dictionnary'][i] for i in topic.argsort()[:-n_top_words - 1:-1]])
         logging.info("Topic #%d: %s" % (topic_idx, topbuf))
+
+    bank.train_classifiers_fullset()
+
     bank.close()
 
 

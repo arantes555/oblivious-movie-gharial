@@ -1,6 +1,6 @@
-MAX_DOCUMENTS = 2000
+MAX_DOCUMENTS = 100
 
-MAX_FEATURES = 500
+MAX_FEATURES = 200
 
 HTML_REVIEWS_DIR = './resources/reviews_dataset/'
 
