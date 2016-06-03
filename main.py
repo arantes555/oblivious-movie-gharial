@@ -69,9 +69,15 @@ def main():
 
     bank.train_classifiers_fullset()
 
+    fail = 0
     for doc in reviews_to_classify:
-        print([bank.shelf['topic_names'][label] for label in bank.classify_document(doc['content'])])
-        print(doc['content'])
+        topics = [bank.shelf['topic_names'][label] for label in bank.classify_document(doc['content'])]
+        if len(topics):
+            logging.info('Topics : %s\nFor document: %s' % (str(topics), doc['content']))
+        else:
+            fail += 1
+    logging.info('Managed to classify %i/%i documents.' %
+                 (len(reviews_to_classify) - fail, len(reviews_to_classify)))
 
     bank.close()
 
