@@ -78,7 +78,7 @@ class DocumentBank:
                                                              )
 
         def corpus():
-            for document in self.tinydb.all():
+            for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
                 yield document['content']
 
         features_matrix = self.shelf['vectorized_documents'].fit_transform(corpus())
@@ -149,7 +149,7 @@ class DocumentBank:
             if W[i][int(yv[i])] < mml:
                 yv[i] = -1  # Assign label -1 to poorly categorized mails
 
-        for document in self.tinydb.all():
+        for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
             self.tinydb.update({'labels': [yv[document.eid - 1]]}, eids=[document.eid])
         return H, W  # Return (H,W) matrix factors
 
@@ -160,7 +160,9 @@ class DocumentBank:
         """
         logging.info('Start training classifiers')
         # Get list of labels from email versus label dict
-        labels = dict([(label, []) for document in self.tinydb.all() for label in document['labels']])
+        labels = dict([(label, [])
+                       for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid)
+                       for label in document['labels']])
         logging.info('Dict of labels computed with size %i' % len(list(labels.keys())))
         # Compute classifier for each label (except -1, which is no label)
         self.shelf['classifiers'] = {}
@@ -188,7 +190,7 @@ class DocumentBank:
         """
         yvc = []
         # Scan each message in msg_id list (ordered as in DataM)
-        for document in self.tinydb.all():
+        for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
             if label in document['labels']:
                 yvc.append(1)
             else:
