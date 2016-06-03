@@ -65,12 +65,12 @@ def main():
 
     bank.vectorize(stop_words=stop_words, max_features=config.MAX_FEATURES)
 
-    (H, W) = bank.topic_extraction()
+    bank.topic_extraction()
 
     bank.train_classifiers_fullset()
 
     for doc in reviews_to_classify:
-        print(bank.classify_document(doc['content']))
+        print([bank.shelf['topic_names'][label] for label in bank.classify_document(doc['content'])])
 
     bank.close()
 

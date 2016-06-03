@@ -29,7 +29,7 @@ class DocumentBank:
 
         self.shelf = shelve.open(shelf_path, writeback=True)
         self.tinydb = TinyDB(tinydb_path, storage=CachingMiddleware(JSONStorage))
-        self.topic_names = {
+        self.shelf['topic_names'] = {
             -1: 'No Topic'
         }
 
@@ -68,7 +68,7 @@ class DocumentBank:
         logging.info('Vectorizing done')
         self.shelf.sync()
 
-    def topic_extraction(self, options=None):
+    def topic_extraction(self, options=None, n_words=12):
         default_options = {
             # SNMF version to use ('l' or 'r')
             'version': 'r',
@@ -134,11 +134,11 @@ class DocumentBank:
                  for i in topic.argsort()[:-config.N_TOP_WORDS - 1:-1]]
             )
             topic_name = "Topic #%i: %s" % (topic_idx, topbuf)
-            self.topic_names[int(topic_idx)] = topic_name
+            self.shelf['topic_names'][int(topic_idx)] = topic_name
             logging.info(topic_name)
 
         for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
-            self.tinydb.update({'labels': [self.topic_names[int(yv[document.eid - 1])]]}, eids=[document.eid])
+            self.tinydb.update({'labels': [int(yv[document.eid - 1])]}, eids=[document.eid])
         return H, W  # Return (H,W) matrix factors
 
     def train_classifiers_fullset(self):
