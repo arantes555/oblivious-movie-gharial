@@ -1,6 +1,6 @@
 import logging
 from DocumentBank import DocumentBank
-from parseReview import ReviewParser
+from parseReview import HtmlReviewParser
 from time import time
 import os
 import logger
@@ -29,7 +29,7 @@ def append_reviews_to_bank(bank, reviews_path, max_reviews):
         # do the work
         with open(os.path.join(reviews_path, file_name), encoding='latin-1') as file:
             try:
-                doc = ReviewParser.parse(file.read())
+                doc = HtmlReviewParser.parse(file.read())
                 bank.add_document(doc['review'], {
                     'rating': doc['rating'],
                     'title': doc['movie'],

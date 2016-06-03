@@ -1,9 +1,11 @@
 from html.parser import HTMLParser
 import re
+import sys
+from time import time
 
 
 # create a subclass and override the handler methods
-class ReviewParser(HTMLParser):
+class HtmlReviewParser(HTMLParser):
     def error(self, message):
         pass
 
@@ -14,7 +16,7 @@ class ReviewParser(HTMLParser):
         self.review = ''
         self.review_paragraphs = []
         self.rating = 0
-    
+
         self._inBody = False
         self._inH1 = False
         self._inH3 = False
@@ -28,7 +30,7 @@ class ReviewParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag == 'body':
             self._inBody = True
-        elif self._inBody:    
+        elif self._inBody:
             if tag == 'h1':
                 self._inH1 = True
             elif tag == 'h3':
@@ -81,6 +83,47 @@ class ReviewParser(HTMLParser):
 
     @staticmethod
     def parse(review_html):
-        parser = ReviewParser()
+        parser = HtmlReviewParser()
         parser.feed(review_html)
         return parser.parse_review()
+
+
+def parse_amazon_review(string):
+    try:
+        parts = [part.split(': ')[1] for part in string.split('\n')[0:8]]
+        return {
+            'movie_id': parts[0],
+            'reviewer_id': parts[1],
+            'reviewer': parts[2],
+            'helpfulness': parts[3],
+            'score': parts[4],
+            'time': parts[5],
+            'summary': parts[6],
+            'review': parts[7]
+        }
+    except IndexError:
+        print("Couldn't parse review : \n" + string)
+        return None
+
+
+def read_reviews_from_file(file, max_reviews=sys.maxsize):
+    t0 = time()
+    fail = 0
+    reviews = []
+    temp = ''
+    with open(file, encoding='latin-1') as f:
+        while len(reviews) < max_reviews:
+            temp += f.read(200)
+            while '\n\n' in temp:
+                review, temp = temp.split('\n\n', maxsplit=1)
+                review = parse_amazon_review(review)
+                if review is not None:
+                    reviews.append(review)
+                else:
+                    fail += 1
+    print('%i reviews read, %i failed, in %is.' % (len(reviews), fail, time() - t0))
+    return reviews
+
+
+x = read_reviews_from_file('./resources/movies.txt', max_reviews=1000000)
+

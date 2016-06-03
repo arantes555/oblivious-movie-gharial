@@ -32,8 +32,8 @@ class DocumentBank:
         logging.info('Starting vectorizing...')
         self.shelf['vectorized_documents'] = CountVectorizer(decode_error='ignore',
                                                              strip_accents='unicode',
-                                                             min_df=0.02,
-                                                             max_df=0.98,
+                                                             min_df=10,
+                                                             max_df=0.80,
                                                              stop_words=stop_words,
                                                              max_features=max_features
         )
