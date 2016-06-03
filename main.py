@@ -47,11 +47,6 @@ def append_html_reviews_to_bank(bank, reviews_path, max_reviews):
                   int(time() - t0)))
 
 
-def append_amazon_review_to_bank(bank, reviews_path, max_reviews):
-    reviews = AmazonReviewsParser.from_file(reviews_path, max_reviews=max_reviews)
-    bank.add_documents([{'content': doc.pop('review'), 'metadata': doc} for doc in reviews])
-
-
 def main():
     logger.initialize('.')
     bank = DocumentBank()
@@ -61,7 +56,12 @@ def main():
     stop_words.extend(utils.stop_words(config.PROJECT_STOP_WORDS_PATH))
     logging.info('Fetched %i stop words' % len(stop_words))
 
-    append_amazon_review_to_bank(bank, config.AMAZON_REVIEWS_FILE, config.MAX_DOCUMENTS)
+    reviews = AmazonReviewsParser.from_file(config.AMAZON_REVIEWS_FILE,
+                                            max_reviews=(config.MAX_DOCUMENTS_ANALYZE + config.DOCUMENTS_CLASSIFY))
+    reviews = [{'content': doc.pop('review'), 'metadata': doc} for doc in reviews]
+    reviews_to_classify = reviews[-config.DOCUMENTS_CLASSIFY:]
+    reviews_to_analyze = reviews[:-config.DOCUMENTS_CLASSIFY]
+    bank.add_documents(reviews_to_analyze)
 
     bank.vectorize(stop_words=stop_words, max_features=config.MAX_FEATURES)
 
@@ -73,6 +73,11 @@ def main():
         logging.info("Topic #%d: %s" % (topic_idx, topbuf))
 
     bank.train_classifiers_fullset()
+
+    print(bank.classify_document(reviews_to_classify[0]['content']))
+    print(bank.classify_document(reviews_to_classify[15]['content']))
+    print(bank.classify_document(reviews_to_classify[62]['content']))
+    print(bank.classify_document(reviews_to_classify[92]['content']))
 
     bank.close()
 
