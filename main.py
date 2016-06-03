@@ -66,18 +66,11 @@ def main():
     bank.vectorize(stop_words=stop_words, max_features=config.MAX_FEATURES)
 
     (H, W) = bank.topic_extraction()
-    # Display topics
-    n_top_words = 12
-    for topic_idx, topic in enumerate(H):
-        topbuf = " ".join([bank.shelf['dictionnary'][i] for i in topic.argsort()[:-n_top_words - 1:-1]])
-        logging.info("Topic #%d: %s" % (topic_idx, topbuf))
 
     bank.train_classifiers_fullset()
 
-    print(bank.classify_document(reviews_to_classify[0]['content']))
-    print(bank.classify_document(reviews_to_classify[15]['content']))
-    print(bank.classify_document(reviews_to_classify[62]['content']))
-    print(bank.classify_document(reviews_to_classify[92]['content']))
+    for doc in reviews_to_classify:
+        print(bank.classify_document(doc['content']))
 
     bank.close()
 

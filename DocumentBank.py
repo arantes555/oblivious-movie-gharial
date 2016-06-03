@@ -12,6 +12,7 @@ from sklearn.metrics import precision_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.svm import SVC
 from time import time
+import config
 
 with warnings.catch_warnings(record=True) as w:
     from nimfa import Snmf
@@ -28,6 +29,9 @@ class DocumentBank:
 
         self.shelf = shelve.open(shelf_path, writeback=True)
         self.tinydb = TinyDB(tinydb_path, storage=CachingMiddleware(JSONStorage))
+        self.topic_names = {
+            -1: 'No Topic'
+        }
 
     def add_document(self, document_content, document_metadata):
         labels = []
@@ -123,8 +127,18 @@ class DocumentBank:
             if W[i][int(yv[i])] < mml:
                 yv[i] = -1  # Assign label -1 to poorly categorized mails
 
+        # Display topics
+        for topic_idx, topic in enumerate(H):
+            topbuf = " ".join(
+                [self.shelf['dictionnary'][i]
+                 for i in topic.argsort()[:-config.N_TOP_WORDS - 1:-1]]
+            )
+            topic_name = "Topic #%i: %s" % (topic_idx, topbuf)
+            self.topic_names[int(topic_idx)] = topic_name
+            logging.info(topic_name)
+
         for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
-            self.tinydb.update({'labels': [yv[document.eid - 1]]}, eids=[document.eid])
+            self.tinydb.update({'labels': [self.topic_names[int(yv[document.eid - 1])]]}, eids=[document.eid])
         return H, W  # Return (H,W) matrix factors
 
     def train_classifiers_fullset(self):
