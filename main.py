@@ -6,6 +6,7 @@ import os
 import logger
 import config
 import utils
+from random import shuffle
 
 
 def append_html_reviews_to_bank(bank, reviews_path, max_reviews):
@@ -59,6 +60,7 @@ def main():
     reviews = AmazonReviewsParser.from_file(config.AMAZON_REVIEWS_FILE,
                                             max_reviews=(config.MAX_DOCUMENTS_ANALYZE + config.DOCUMENTS_CLASSIFY))
     reviews = [{'content': doc.pop('review'), 'metadata': doc} for doc in reviews]
+    shuffle(reviews)
     reviews_to_classify = reviews[-config.DOCUMENTS_CLASSIFY:]
     reviews_to_analyze = reviews[:-config.DOCUMENTS_CLASSIFY]
     bank.add_documents(reviews_to_analyze)

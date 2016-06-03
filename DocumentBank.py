@@ -136,6 +136,7 @@ class DocumentBank:
             self.shelf['topic_names'][int(topic_idx)] = topic_name
             logging.info(topic_name)
 
+        logging.info('Updating database...')
         for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
             self.tinydb.update({'labels': [int(yv[document.eid - 1])]}, eids=[document.eid])
         return H, W  # Return (H,W) matrix factors
@@ -196,7 +197,7 @@ class DocumentBank:
         ratio: float
             Ratio of the yvc.
         """
-        logging.info('Starting GridSearch on topic id %s' % l_id)
+        logging.debug('Starting GridSearch on topic id %s' % l_id)
         param_grid = [{'C': [0.1, 1, 10, 100], 'kernel': ['linear']}]
         scores = [('precision', precision_score)]  # TODO: refine SVM scores
         clf = GridSearchCV(SVC(C=1, class_weight={1: ratio}), param_grid, cv=5)
@@ -204,7 +205,7 @@ class DocumentBank:
         # Store best classifier in dict
         self.shelf['classifiers'][l_id] = clf.best_estimator_
         # Report results
-        logging.info('GridSearch done')
+        logging.debug('GridSearch done')
         for score_name, score_func in scores:
             logging.debug("GridSearch on %s" % score_name)
             logging.debug("Best parameters set found on development set:")
@@ -214,7 +215,7 @@ class DocumentBank:
                 logging.debug("%0.3f (+/-%0.03f) for %r" % (mean_score, scores.std() / 2, params))
 
     def classify_document(self, content):
-        logging.info('Classifying given document')
+        logging.debug('Classifying given document')
         # Tokenize body
         vecm = self.shelf['vectorizer'].transform([content]).toarray()
 
@@ -225,7 +226,7 @@ class DocumentBank:
             resp = self.shelf['classifiers'][label].predict(vecm)
             if resp > 0:
                 labels.append(label)
-        logging.info('Classifying done')
+        logging.debug('Classifying done')
         return labels
 
     def close(self):
