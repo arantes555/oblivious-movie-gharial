@@ -1,5 +1,6 @@
 nimfa==1.2.3
 numpy==1.11.0
+requests==2.10.0
 scikit-learn==0.17.1
 scipy==0.17.1
 sklearn==0.0
