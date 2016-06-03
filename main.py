@@ -49,8 +49,7 @@ def append_html_reviews_to_bank(bank, reviews_path, max_reviews):
 
 def append_amazon_review_to_bank(bank, reviews_path, max_reviews):
     reviews = AmazonReviewsParser.from_file(reviews_path, max_reviews=max_reviews)
-    for doc in reviews:
-        bank.add_document(doc.pop('review'), doc)
+    bank.add_documents([{'content': doc.pop('review'), 'metadata': doc} for doc in reviews])
 
 
 def main():

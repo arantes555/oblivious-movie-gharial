@@ -28,6 +28,9 @@ class DocumentBank:
     def add_document(self, document_content, document_metadata):
         self.tinydb.insert({'content': document_content, 'metadata': document_metadata})
 
+    def add_documents(self, documents):
+        self.tinydb.insert_multiple(documents)
+
     def vectorize(self, stop_words=None, max_features=2000):
         logging.info('Starting vectorizing...')
         self.shelf['vectorized_documents'] = CountVectorizer(decode_error='ignore',
