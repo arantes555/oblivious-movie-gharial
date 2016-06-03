@@ -12,7 +12,6 @@ from sklearn.metrics import precision_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.svm import SVC
 from time import time
-import config
 
 with warnings.catch_warnings(record=True) as w:
     from nimfa import Snmf
@@ -131,7 +130,7 @@ class DocumentBank:
         for topic_idx, topic in enumerate(H):
             topbuf = " ".join(
                 [self.shelf['dictionnary'][i]
-                 for i in topic.argsort()[:-config.N_TOP_WORDS - 1:-1]]
+                 for i in topic.argsort()[:-n_words - 1:-1]]
             )
             topic_name = "Topic #%i: %s" % (topic_idx, topbuf)
             self.shelf['topic_names'][int(topic_idx)] = topic_name
