@@ -1,6 +1,6 @@
 import logging
 from DocumentBank import DocumentBank
-from parseReview import HtmlReviewParser
+from parseReview import HtmlReviewParser, AmazonReviewsParser
 from time import time
 import os
 import logger
@@ -8,7 +8,7 @@ import config
 import utils
 
 
-def append_reviews_to_bank(bank, reviews_path, max_reviews):
+def append_html_reviews_to_bank(bank, reviews_path, max_reviews):
     logging.info('Starting to parse reviews')
     # Only for debugging and logging purposes
     t0 = time()
@@ -30,12 +30,7 @@ def append_reviews_to_bank(bank, reviews_path, max_reviews):
         with open(os.path.join(reviews_path, file_name), encoding='latin-1') as file:
             try:
                 doc = HtmlReviewParser.parse(file.read())
-                bank.add_document(doc['review'], {
-                    'rating': doc['rating'],
-                    'title': doc['movie'],
-                    'author': doc['reviewer'],
-                    'capsule_review': doc['capsule_review']
-                })
+                bank.add_document(doc.pop('review'), doc)
                 if doc['rating'] != '?':
                     success += 1
                 else:
@@ -52,6 +47,12 @@ def append_reviews_to_bank(bank, reviews_path, max_reviews):
                   int(time() - t0)))
 
 
+def append_amazon_review_to_bank(bank, reviews_path, max_reviews):
+    reviews = AmazonReviewsParser.from_file(reviews_path, max_reviews=max_reviews)
+    for doc in reviews:
+        bank.add_document(doc.pop('review'), doc)
+
+
 def main():
     logger.initialize('.')
     bank = DocumentBank()
@@ -60,7 +61,7 @@ def main():
     stop_words = utils.stop_words(config.STOP_WORDS_PATH)
     logging.info('Fetched %i stop words' % len(stop_words))
 
-    append_reviews_to_bank(bank, config.REVIEWS_DIR, config.MAX_DOCUMENTS)
+    append_amazon_review_to_bank(bank, config.AMAZON_REVIEWS_FILE, config.MAX_DOCUMENTS)
 
     bank.vectorize(stop_words=stop_words, max_features=config.MAX_FEATURES)
 
