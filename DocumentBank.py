@@ -33,34 +33,34 @@ class DocumentBank:
         labels = []
 
         self.tinydb.insert({
-                'metadata': document_metadata,
-                'content': document_content,
-                'labels': labels
-            })
+            'metadata': document_metadata,
+            'content': document_content,
+            'labels': labels
+        })
 
     def add_documents(self, documents):
         self.tinydb.insert_multiple(documents)
 
     def vectorize(self, stop_words=None, max_features=2000):
         logging.info('Start vectorizing...')
-        self.shelf['vectorized_documents'] = CountVectorizer(decode_error='ignore',
-                                                             strip_accents='unicode',
-                                                             min_df=0.05,
-                                                             max_df=0.80,
-                                                             stop_words=stop_words,
-                                                             max_features=max_features
-                                                             )
+        self.shelf['vectorizer'] = CountVectorizer(decode_error='ignore',
+                                                   strip_accents='unicode',
+                                                   min_df=0.05,
+                                                   max_df=0.80,
+                                                   stop_words=stop_words,
+                                                   max_features=max_features
+                                                   )
 
         def corpus():
             for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
                 yield document['content']
 
-        features_matrix = self.shelf['vectorized_documents'].fit_transform(corpus())
+        features_matrix = self.shelf['vectorizer'].fit_transform(corpus())
 
         self.shelf['features_matrix'] = features_matrix
 
         # Inverse the vectorized vocabulary
-        self.shelf['dictionnary'] = self.shelf['vectorized_documents'].get_feature_names()
+        self.shelf['dictionnary'] = self.shelf['vectorizer'].get_feature_names()
         logging.info('Vectorizing done')
         self.shelf.sync()
 
@@ -204,7 +204,7 @@ class DocumentBank:
 
     def classify_document(self, content):
         # Tokenize body
-        vecm = self.shelf['vectorized_documents'].transform([content]).toarray()
+        vecm = self.shelf['vectorizer'].transform([content]).toarray()
 
         # Produce label list
         labels = []
