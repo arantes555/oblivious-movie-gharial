@@ -58,7 +58,7 @@ def main():
 
     movies_reviews = AmazonReviewsParser.from_file(config.AMAZON_REVIEWS_FILE,
                                                    max_reviews=(
-                                                       config.MAX_DOCUMENTS_ANALYZE + config.DOCUMENTS_CLASSIFY))
+                                                       config.MAX_REVIEWS))
     movies = [Movie(movie_id, [{
                                    'userID': review['reviewer_id'],
                                    'rating': review['score'],
@@ -79,10 +79,10 @@ def main():
     fail = 0
     for movie in movies_to_classify:
         topics = [bank.shelf['topic_names'][label] for label in bank.classify_document(movie['content'])]
-    if len(topics):
-        logging.info('Topics : %s\nFor document: %s' % (str(topics), movie['content']))
-    else:
-        fail += 1
+        if len(topics):
+            logging.info('Topics : %s\nFor document: %s' % (str(topics), movie['content']))
+        else:
+            fail += 1
     logging.info('Managed to classify %i/%i documents.' %
                  (len(movies_to_classify) - fail, len(movies_to_classify)))
     bank.close()
