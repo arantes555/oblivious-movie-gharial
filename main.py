@@ -8,14 +8,15 @@ import logger
 import utils
 from random import shuffle
 import json
+from shutil import copyfile
 
 
 def date():
     return strftime('%Y-%m-%d-%H:%M:%S')
 
 
-def write_report(report):
-    with open('reports/' + date() + '.json', 'w') as outfile:
+def write_report(filename, report):
+    with open('reports/' + filename + '.json', 'w') as outfile:
         json.dump(report, outfile, sort_keys=True, indent=2)
 
 
@@ -106,8 +107,8 @@ def main():
     logging.info(classification_counter)
     logging.info('Managed to classify %i/%i documents.' %
                  (len(movies_to_classify) - classification_counter[-1], len(movies_to_classify)))
-
-    write_report({
+    report_filename = date()
+    write_report(report_filename, {
         'start_date': start_date,
         'end_date': date(),
         'params': {
@@ -131,6 +132,7 @@ def main():
                     }]
     })
     bank.close()
+    copyfile('./all.log', './reports/%s.log' % report_filename)
 
 
 if __name__ == '__main__':
