@@ -1,5 +1,11 @@
 # Custom
-resources/
+resources/nltk_data
+resources/reviews_dataset
+resources/movies.txt
+resources/polarity_html.zip
+resources/stopwords.zip
+resources/stopwords
+
 .idea/
 *.tinydb
 *.shelf
@@ -68,4 +74,3 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
-

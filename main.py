@@ -80,7 +80,7 @@ def main():
     for movie in movies_to_classify:
         topics = [bank.shelf['topic_names'][label] for label in bank.classify_document(movie['content'])]
         if len(topics):
-            logging.info('Topics : %s\nFor document: %s' % (str(topics), movie['content']))
+            logging.info('Topics : %s\nFor document: %s' % (str(topics), movie['metadata']))
         else:
             fail += 1
     logging.info('Managed to classify %i/%i documents.' %

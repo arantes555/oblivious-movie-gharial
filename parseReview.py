@@ -92,7 +92,9 @@ class HtmlReviewParser(HTMLParser):
 class AmazonReviewsParser:
     @staticmethod
     def parse_review(string):
-        string = string.replace('<br />', ' ')
+        string = string.replace('<br />', ' ')\
+            .replace('<p>', '').replace('<p/>', '')\
+            .replace('<p >', '').replace('<p /', '')
         parts = [part.split(': ')[1] for part in string.split('\n')[0:8]]
         review = {
             'movie_id': parts[0],

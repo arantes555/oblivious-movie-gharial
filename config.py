@@ -1,13 +1,13 @@
 import os
 
 # Amount of reviews to analyse to train the classifiers
-MAX_REVIEWS = 30000
+MAX_REVIEWS = 100000
 
 # Movies to classify after the model is trained
-MOVIES_TO_CLASSIFY = 10
+MOVIES_TO_CLASSIFY = 100
 
 # Maximum amount of words in the dictionnary
-MAX_FEATURES = 10000
+MAX_FEATURES = 15000
 
 N_TOP_WORDS = 12
 
