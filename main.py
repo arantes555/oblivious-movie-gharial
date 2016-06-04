@@ -6,6 +6,7 @@ from time import time
 import os
 import logger
 import utils
+from random import shuffle
 
 
 def append_html_reviews_to_bank(bank, reviews_path, max_reviews):
@@ -65,6 +66,8 @@ def main():
                                    'review': review['review']
                                } for review in reviews])
               for movie_id, reviews in movies_reviews.items()]
+
+    shuffle(movies)
 
     movies_to_analyze = [movie.for_db() for movie in movies[:-config.MOVIES_TO_CLASSIFY]]
     movies_to_classify = [movie.for_db() for movie in movies[-config.MOVIES_TO_CLASSIFY:]]
