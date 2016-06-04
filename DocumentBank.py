@@ -18,33 +18,82 @@ with warnings.catch_warnings(record=True) as w:
 
 
 class DocumentBank:
+    """
+    Main class for storing documents and working on them
+    """
+
     def __init__(self,
                  shelf_path='./bank.shelf',
                  tinydb_path='./documents.tinydb',
                  reset=True):
+        """
+        Initialize or load DocumentBank
+        :param shelf_path: path to the shelf file storing a picklized dict
+        :type shelf_path: str
+        :param tinydb_path: path to the tinydb file storing the documents as a JSON
+        :type tinydb_path: str
+        :param reset: reset the document bank or load it, defaults to True
+        :type reset: bool
+        """
         if reset:
+            logging.debug('DocumentBank is set to be reset')
+            logging.debug('Removing shelf file if any')
             utils.safe_remove(shelf_path)
+            logging.debug('Removing tinydb file if any')
             utils.safe_remove(tinydb_path)
 
+        logging.debug('Loading (or creating) shelf')
         self.shelf = shelve.open(shelf_path, writeback=True)
+        logging.debug('Loading (or creating) tinydb')
         self.tinydb = TinyDB(tinydb_path, storage=CachingMiddleware(JSONStorage))
-        self.shelf['topic_names'] = {
-            -1: 'No Topic'
-        }
 
-    def add_document(self, document_content, document_metadata):
-        labels = []
+        if reset:
+            logging.debug('Initializing topic names')
+            self.shelf['topic_names'] = {
+                -1: 'No Topic'
+            }
+            logging.debug('Initializing vectorizer')
+            self.shelf['vectorizer'] = None
+            logging.debug('Initializing features matrix')
+            self.shelf['features_matrix'] = None
+            logging.debug('Initializing dictionnary')
+            self.shelf['dictionnary'] = None
+            logging.debug('Initializing classifiers')
+            self.shelf['classifiers'] = None
+            self.shelf.sync()
 
+    def add_document(self, content, metadata):
+        """
+        Add a single document to the bank
+        :param content: content of the document
+        :type content: str
+        :param metadata: metadata around document
+        :type metadata: dict
+        """
+        logging.debug('Inserting single document to tinydb')
         self.tinydb.insert({
-            'metadata': document_metadata,
-            'content': document_content,
-            'labels': labels
+            'metadata': metadata,
+            'content': content,
+            'topic_ids': []
         })
 
     def add_documents(self, documents):
+        """
+        Add multiple documents to the bank
+        :param documents: list of documents
+        :type documents: list
+        """
+        logging.debug('Inserting multiple documents to tinydb')
         self.tinydb.insert_multiple(documents)
 
     def vectorize(self, stop_words=None, max_features=2000):
+        """
+
+        :param stop_words: list of stop words to give to the CountVectorizer
+        :type stop_words: list
+        :param max_features: maximum amount of features (words) to vectorize
+        :type max_features: int
+        """
         logging.info('Start vectorizing...')
         self.shelf['vectorizer'] = CountVectorizer(decode_error='ignore',
                                                    strip_accents='unicode',
@@ -55,6 +104,9 @@ class DocumentBank:
                                                    )
 
         def corpus():
+            """
+            :return: Generator yielding all the documents content
+            """
             for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
                 yield document['content']
 
@@ -68,6 +120,15 @@ class DocumentBank:
         self.shelf.sync()
 
     def topic_extraction(self, options=None, n_words=12):
+        """
+
+        :param options: kwargs of nimfa.Snmf()
+        :type options: dict
+        :param n_words: amount of words to display per topic, doesn't impact qualty of topics
+        :type n_words: int
+        :return: H,W the two matrix factors
+        :rtype: tuple
+        """
         default_options = {
             # SNMF version to use ('l' or 'r')
             'version': 'r',
@@ -117,16 +178,15 @@ class DocumentBank:
 
         (H, W) = bas, fctr_res.basis().toarray()
 
-        # Create artificial user folders/labels from NMF topic results
-        # (the Melanion dataset does not have any labels)
+        # Calculate a best topic_id for each document, if too poor, associate -1
         yv = zeros(W.shape[0])
         mml = W.mean()
         for i in range(W.shape[0]):
             yv[i] = W[i].argmax()
             if W[i][int(yv[i])] < mml:
-                yv[i] = -1  # Assign label -1 to poorly categorized mails
+                yv[i] = -1  # Assign topic_id -1 to poorly categorized mails
 
-        # Display topics
+        # Display and store topics
         for topic_idx, topic in enumerate(H):
             topbuf = " ".join(
                 [self.shelf['dictionnary'][i]
@@ -138,26 +198,25 @@ class DocumentBank:
 
         logging.info('Updating database...')
         for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
-            self.tinydb.update({'labels': [int(yv[document.eid - 1])]}, eids=[document.eid])
+            self.tinydb.update({'topic_ids': [int(yv[document.eid - 1])]}, eids=[document.eid])
         return H, W  # Return (H,W) matrix factors
 
     def train_classifiers_fullset(self):
         """
-        Compute classifiers for full email set, overwrites existing classifiers.
-        Uses list of all unique labels computed from self.mail_db.data['labels']
+        Trains the classifiers on the generated topics
         """
         logging.info('Start training classifiers')
         # Get list of labels from email versus label dict
-        labels = dict([(label, [])
-                       for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid)
-                       for label in document['labels']])
-        logging.info('Dict of labels computed with size %i' % len(list(labels.keys())))
+        topic_ids = dict([(topic_id, [])
+                          for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid)
+                          for topic_id in document['topic_ids']])
+        logging.info('Dict of labels computed with size %i' % len(list(topic_ids.keys())))
         # Compute classifier for each label (except -1, which is no label)
         self.shelf['classifiers'] = {}
-        for label in labels.keys():
-            logging.info('Working on label %s' % str(label))
-            if not label == -1.0:  # TODO : Separate in multiple functions ...
-                yvc = self._generate_yvc(label)
+        for topic_id in topic_ids.keys():
+            logging.info('Working on topic %s' % str(topic_id))
+            if not topic_id == -1.0:  # TODO : Separate in multiple functions ...
+                yvc = self._generate_yvc(topic_id)
                 logging.info('generated YVC')
                 # Check if enough positives
                 length = len(yvc)
@@ -166,44 +225,40 @@ class DocumentBank:
                     logging.info('Respects strange condition')
                     # Launch classifier on feature matrix
                     ratio = (length - total) / (length + total)
-                    self._classify(label, yvc, ratio)
+                    self._classify(topic_id, yvc, ratio)
 
-    def _generate_yvc(self, label):
+    def _generate_yvc(self, topic_id):
         """
         Helper method for "train_classifiers_fullset". Should not be used directly.
-        Parameters
-        ----------
-        l_id: float
-            ID of the Label for which to compute the yvc.
+        :param topic_id: id of the topic
+        :type topic_id: int
         """
         yvc = []
         # Scan each message in msg_id list (ordered as in DataM)
         for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
-            if label in document['labels']:
+            if topic_id in document['topic_ids']:
                 yvc.append(1)
             else:
                 yvc.append(-1)
         return yvc
 
-    def _classify(self, l_id, yvc, ratio):
+    def _classify(self, topic_id, yvc, ratio):
         """
         Helper method for "train_classifiers_fullset". Should not be used directly.
-        Parameters
-        ----------
-        l_id: float
-            ID of the current Label.
-        yvc: list
-            Vector to classify.
-        ratio: float
-            Ratio of the yvc.
+        :param topic_id: ID of the current topic.
+        :type topic_id: int
+        :param yvc: Vector to classify.
+        :type yvc: list
+        :param ratio: Ratio of the yvc.
+        :type ratio: float
         """
-        logging.debug('Starting GridSearch on topic id %s' % l_id)
+        logging.debug('Starting GridSearch on topic id %s' % topic_id)
         param_grid = [{'C': [0.1, 1, 10, 100], 'kernel': ['linear']}]
         scores = [('precision', precision_score)]  # TODO: refine SVM scores
         clf = GridSearchCV(SVC(C=1, class_weight={1: ratio}), param_grid, cv=5)
         clf.fit(self.shelf['features_matrix'], array(yvc))
         # Store best classifier in dict
-        self.shelf['classifiers'][l_id] = clf.best_estimator_
+        self.shelf['classifiers'][topic_id] = clf.best_estimator_
         # Report results
         logging.debug('GridSearch done')
         for score_name, score_func in scores:
@@ -215,21 +270,31 @@ class DocumentBank:
                 logging.debug("%0.3f (+/-%0.03f) for %r" % (mean_score, scores.std() / 2, params))
 
     def classify_document(self, content):
+        """
+        Assigns a topic to a given document
+        :param content: document content
+        :type content: str
+        :return: list of topic ids
+        :rtype: list
+        """
         logging.debug('Classifying given document')
         # Tokenize body
         vecm = self.shelf['vectorizer'].transform([content]).toarray()
 
-        # Produce label list
-        labels = []
-        for label in self.shelf['classifiers']:
-            # Use SVC model to classify mail for label l_id
-            resp = self.shelf['classifiers'][label].predict(vecm)
+        # Produce topic list
+        topic_ids = []
+        for topic_id in self.shelf['classifiers']:
+            # Use SVC model to classify mail for topic represented by topic_id
+            resp = self.shelf['classifiers'][topic_id].predict(vecm)
             if resp > 0:
-                labels.append(label)
+                topic_ids.append(topic_id)
         logging.debug('Classifying done')
-        return labels
+        return topic_ids
 
     def close(self):
+        """
+        Method to close the bank, synchronizes the cache of the tinydb and of the shelf
+        """
         logging.info("Closing bank")
         self.shelf.close()
         self.tinydb.close()
