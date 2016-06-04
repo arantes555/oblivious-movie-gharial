@@ -64,7 +64,7 @@ class Topic:
         return "Topic #%i: %s" % (self.id, top_words)
 
     def __repr__(self):
-        return self.__str__()
+        return "#%i" % self.id
 
 
 class DocumentBank:
@@ -253,7 +253,6 @@ class DocumentBank:
             _topic = Topic(int(topic_idx), [self.shelf['dictionnary'][i]
                                             for i in topic.argsort()[:-n_words - 1:-1]])
             self.shelf['topics'][int(topic_idx)] = _topic
-            logging.info('Assigned %i movie(s) to topic:' % counter[int(topic_idx)])
             logging.info('Topic #%i - %i movies: %s' % (_topic.id, counter[_topic.id], " ".join(_topic.top_words)))
         logging.info('%i movie(s) were unassigned' % counter[-1])
         logging.info('Updating database...')
