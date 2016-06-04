@@ -69,26 +69,34 @@ def main():
 
     shuffle(movies)
 
-    movies_to_analyze = [movie.for_db() for movie in movies[:-config.MOVIES_TO_CLASSIFY]]
-    movies_to_classify = [movie.for_db() for movie in movies[-config.MOVIES_TO_CLASSIFY:]]
+    movies_to_analyze = [movie.serialize() for movie in movies[:-config.MOVIES_TO_CLASSIFY]]
+    movies_to_classify = [movie.serialize() for movie in movies[-config.MOVIES_TO_CLASSIFY:]]
+    logging.info('Analyzing %i movies' % len(movies_to_analyze))
     bank.add_documents(movies_to_analyze)
 
     bank.vectorize(stop_words=stop_words, max_features=config.MAX_FEATURES)
 
-    bank.topic_extraction(n_words=config.N_TOP_WORDS)
+    bank.topic_extraction({'rank': config.N_TOPICS}, n_words=config.N_TOP_WORDS)
 
-    bank.train_classifiers_fullset(n_jobs=config.N_JOBS)
+    bank.train_classifiers_fullset(n_jobs=config.N_JOBS,
+                                   min_amount_relevant=int(config.MIN_RELEVANCE * len(movies_to_analyze)))
 
     fail = 0
+    counter = dict((i, 0) for i in range(0, config.N_TOPICS))
     for movie in movies_to_classify:
-        topics = [bank.shelf['topic_names'][label] for label in bank.classify_document(movie['content'])]
-        if len(topics):
-            logging.info('Topics : %s\nFor document: %s' % (str(topics), movie['metadata']))
+        topic_ids = [topic_id for topic_id in bank.classify_document(Movie(movie['id'], movie['reviews']).full_text())]
+        topic_names = [bank.shelf['topic_names'][topic_id] for topic_id in topic_ids]
+        for topic_id in topic_ids:
+            counter[topic_id] += 1
+        if len(topic_names):
+            logging.info('Topics : %s\nFor document: %s' % (str(topic_names), movie['id']))
         else:
             fail += 1
+    logging.info(counter)
     logging.info('Managed to classify %i/%i documents.' %
                  (len(movies_to_classify) - fail, len(movies_to_classify)))
     bank.close()
+
 
 if __name__ == '__main__':
     main()

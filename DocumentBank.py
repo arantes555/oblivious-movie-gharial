@@ -12,7 +12,6 @@ from sklearn.metrics import precision_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.svm import SVC
 from time import time
-# from nltk.stem.snowball import SnowballStemmer
 from nltk.tokenize import RegexpTokenizer
 from nltk.stem import WordNetLemmatizer
 
@@ -32,11 +31,7 @@ class Movie:
         self.id = movie_id
         self.reviews = []
         if reviews is not None:
-            self.reviews.extend([{
-                                     'userID': review['userID'],
-                                     'rating': review['rating'],
-                                     'review': review['review']
-                                 } for review in reviews])
+            self.reviews.extend(reviews)
 
     def add_review(self, user_id, rating, review):
         self.reviews.append({
@@ -57,9 +52,6 @@ class Movie:
             'id': self.id,
             'reviews': self.reviews
         }
-
-    def for_db(self):
-        return {'content': self.full_text(), 'metadata': self.id, 'topic_ids': []}
 
 
 class DocumentBank:
@@ -154,8 +146,8 @@ class DocumentBank:
             """
             :return: Generator yielding all the documents content
             """
-            for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
-                yield document['content']
+            for movie in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
+                yield Movie(movie['id'], movie['reviews']).full_text()
 
         features_matrix = self.shelf['vectorizer'].fit_transform(corpus())
 
@@ -236,12 +228,13 @@ class DocumentBank:
         # Calculate a best topic_id for each document, if too poor, associate -1
         yv = zeros(W.shape[0])
         mml = W.mean()
+        counter = dict((i, 0) for i in range(-1, options['rank']))
         for i in range(W.shape[0]):
             yv[i] = W[i].argmax()
             if W[i][int(yv[i])] < mml:
                 yv[i] = -1  # Assign topic_id -1 to poorly categorized mails
+            counter[int(yv[i])] += 1
         logging.debug('Topics were assigned in %is' % int(time() - t3))
-
         # Display and store topics
         for topic_idx, topic in enumerate(H):
             topbuf = " ".join(
@@ -250,8 +243,9 @@ class DocumentBank:
             )
             topic_name = "Topic #%i: %s" % (topic_idx, topbuf)
             self.shelf['topic_names'][int(topic_idx)] = topic_name
+            logging.info('Assigned %i movie(s) to topic:' % counter[int(topic_idx)])
             logging.info(topic_name)
-
+        logging.info('%i movie(s) were unassigned' % counter[-1])
         logging.info('Updating database...')
         t4 = time()
 
@@ -262,11 +256,12 @@ class DocumentBank:
         logging.info('Database updated in %is' % int(time() - t4))
         return H, W  # Return (H,W) matrix factors
 
-    def train_classifiers_fullset(self, n_jobs=1):
+    def train_classifiers_fullset(self, n_jobs=1, min_amount_relevant=10):
         """
         Trains the classifiers on the generated topics
         """
-        logging.info('Start training classifiers')
+        min_amount_relevant = max(5, min_amount_relevant)
+        logging.info('Start training classifiers with a minimum relevance of %i' % min_amount_relevant)
         # Compute classifier for each label (except -1, which is no label)
         topic_ids = (topic_id for topic_id in self.shelf['topic_names'].keys() if topic_id != -1)
         self.shelf['classifiers'] = {}
@@ -274,9 +269,10 @@ class DocumentBank:
             logging.debug('Working on topic #%i out of %i' % (topic_id, len(self.shelf['topic_names']) - 1))
             yvc = self._generate_yvc(topic_id)
             # Check if enough positives
-            length = len(yvc)
-            total = sum(yvc)
-            if total + length > 20:
+            length = len(yvc)  # 2 * (amount of films with topic_id) - amount of films
+            total = sum(yvc)  # amount of films
+            # amount of films with topic_id > min_amount_relevant
+            if ((total + length) / 2) > min_amount_relevant:
                 t0 = time()
                 logging.debug('Generating classifier for topic #%i' % topic_id)
                 # Launch classifier on feature matrix

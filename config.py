@@ -1,16 +1,19 @@
 import os
 
+# Minimum relevance (in per cent of the total amount of documents) to accept a classifier
+MIN_RELEVANCE = 0.001
+
 # Amount of reviews to analyse to train the classifiers
-MAX_REVIEWS = 200000
+MAX_REVIEWS = 50000
 
 # Movies to classify after the model is trained
 MOVIES_TO_CLASSIFY = 100
 
 # Maximum amount of words in the dictionnary
-MAX_FEATURES = 15000
+MAX_FEATURES = 2000
 
 # Amount of topics to extract, keep it relatively low
-N_TOPICS = 20
+N_TOPICS = 30
 
 # Amount of words to display for each topic, doesn't affect anything except printing
 N_TOP_WORDS = 12
