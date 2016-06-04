@@ -1,10 +1,10 @@
+import config
 import logging
 from DocumentBank import DocumentBank, Movie
 from parseReview import HtmlReviewParser, AmazonReviewsParser
 from time import time
 import os
 import logger
-import config
 import utils
 
 

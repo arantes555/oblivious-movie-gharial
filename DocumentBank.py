@@ -12,16 +12,17 @@ from sklearn.metrics import precision_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.svm import SVC
 from time import time
-from nltk.stem.snowball import EnglishStemmer
-from nltk.tokenize import word_tokenize
+from nltk.stem.snowball import SnowballStemmer
+from nltk.tokenize import RegexpTokenizer
 
 with warnings.catch_warnings(record=True) as w:
     from nimfa import Snmf
 
 
-def stem(text):
-    stemmer = EnglishStemmer(ignore_stopwords=True)
-    return " ".join([stemmer.stem(word) for word in word_tokenize(text)])
+def tokenizer(text):
+    stemmer = SnowballStemmer('english', ignore_stopwords=True)
+    _tokenizer = RegexpTokenizer(r'\w+')
+    return [stemmer.stem(word) for word in _tokenizer.tokenize(text)]
 
 
 class Movie:
@@ -32,14 +33,14 @@ class Movie:
             self.reviews.extend([{
                                      'userID': review['userID'],
                                      'rating': review['rating'],
-                                     'review': stem(review['review'])
+                                     'review': review['review']
                                  } for review in reviews])
 
     def add_review(self, user_id, rating, review):
         self.reviews.append({
             'userID': user_id,
             'rating': rating,
-            'review': stem(review)
+            'review': review
         })
 
     def _generate_full_text(self):
@@ -47,7 +48,7 @@ class Movie:
             yield review['review']
 
     def full_text(self):
-        return ' '.join(self._generate_full_text())
+        return '\n'.join(self._generate_full_text())
 
     def serialize(self):
         return {
@@ -137,7 +138,9 @@ class DocumentBank:
         :type max_features: int
         """
         logging.info('Start vectorizing...')
+
         self.shelf['vectorizer'] = CountVectorizer(decode_error='ignore',
+                                                   tokenizer=tokenizer,
                                                    strip_accents='unicode',
                                                    min_df=0.05,
                                                    max_df=0.80,
@@ -256,15 +259,15 @@ class DocumentBank:
         # Compute classifier for each label (except -1, which is no label)
         self.shelf['classifiers'] = {}
         for topic_id in topic_ids.keys():
-            logging.info('Working on topic %s' % str(topic_id))
+            logging.debug('Working on topic %s' % str(topic_id))
             if not topic_id == -1.0:  # TODO : Separate in multiple functions ...
                 yvc = self._generate_yvc(topic_id)
-                logging.info('generated YVC')
+                logging.debug('generated YVC')
                 # Check if enough positives
                 length = len(yvc)
                 total = sum(yvc)
                 if total > -length + 20:  # TODO : "-len(yvc) + 20" ? Oo
-                    logging.info('Respects strange condition')
+                    logging.debug('Respects strange condition')
                     # Launch classifier on feature matrix
                     ratio = (length - total) / (length + total)
                     self._classify(topic_id, yvc, ratio)
