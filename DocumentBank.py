@@ -14,6 +14,7 @@ from sklearn.svm import SVC
 from time import time
 from nltk.stem.snowball import EnglishStemmer
 from nltk.tokenize import word_tokenize
+
 with warnings.catch_warnings(record=True) as w:
     from nimfa import Snmf
 
@@ -24,23 +25,26 @@ def stem(text):
 
 
 class Movie:
-    def __init__(self, id, reviews=None):
-        self.id = id
+    def __init__(self, movie_id, reviews=None):
+        self.id = movie_id
+        self.reviews = []
         if reviews is not None:
-            self.reviews = reviews
-        else:
-            self.reviews = []
+            self.reviews.extend([{
+                                     'userID': review['userID'],
+                                     'rating': review['rating'],
+                                     'review': stem(review['review'])
+                                 } for review in reviews])
 
-    def add_review(self, userID, rating, review):
+    def add_review(self, user_id, rating, review):
         self.reviews.append({
-            'userID': userID,
+            'userID': user_id,
             'rating': rating,
             'review': stem(review)
         })
 
     def _generate_full_text(self):
         for review in self.reviews:
-            yield review
+            yield review['review']
 
     def full_text(self):
         return ' '.join(self._generate_full_text())
@@ -50,6 +54,9 @@ class Movie:
             'id': self.id,
             'reviews': self.reviews
         }
+
+    def for_db(self):
+        return {'content': self.full_text(), 'metadata': self.id, 'topic_ids': []}
 
 
 class DocumentBank:

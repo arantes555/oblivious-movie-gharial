@@ -1,12 +1,11 @@
 import logging
-from DocumentBank import DocumentBank
+from DocumentBank import DocumentBank, Movie
 from parseReview import HtmlReviewParser, AmazonReviewsParser
 from time import time
 import os
 import logger
 import config
 import utils
-from random import shuffle
 
 
 def append_html_reviews_to_bank(bank, reviews_path, max_reviews):
@@ -57,13 +56,19 @@ def main():
     stop_words.extend(utils.stop_words(config.PROJECT_STOP_WORDS_PATH))
     logging.info('Fetched %i stop words' % len(stop_words))
 
-    reviews = AmazonReviewsParser.from_file(config.AMAZON_REVIEWS_FILE,
-                                            max_reviews=(config.MAX_DOCUMENTS_ANALYZE + config.DOCUMENTS_CLASSIFY))
-    reviews = [{'content': doc.pop('review'), 'metadata': doc} for doc in reviews]
-    shuffle(reviews)
-    reviews_to_classify = reviews[-config.DOCUMENTS_CLASSIFY:]
-    reviews_to_analyze = reviews[:-config.DOCUMENTS_CLASSIFY]
-    bank.add_documents(reviews_to_analyze)
+    movies_reviews = AmazonReviewsParser.from_file(config.AMAZON_REVIEWS_FILE,
+                                                   max_reviews=(
+                                                       config.MAX_DOCUMENTS_ANALYZE + config.DOCUMENTS_CLASSIFY))
+    movies = [Movie(movie_id, [{
+                                   'userID': review['reviewer_id'],
+                                   'rating': review['score'],
+                                   'review': review['review']
+                               } for review in reviews])
+              for movie_id, reviews in movies_reviews.items()]
+
+    movies_to_analyze = [movie.for_db() for movie in movies[:-config.MOVIES_TO_CLASSIFY]]
+    movies_to_classify = [movie.for_db() for movie in movies[-config.MOVIES_TO_CLASSIFY:]]
+    bank.add_documents(movies_to_analyze)
 
     bank.vectorize(stop_words=stop_words, max_features=config.MAX_FEATURES)
 
@@ -72,16 +77,15 @@ def main():
     bank.train_classifiers_fullset()
 
     fail = 0
-    for doc in reviews_to_classify:
-        topics = [bank.shelf['topic_names'][label] for label in bank.classify_document(doc['content'])]
-        if len(topics):
-            logging.info('Topics : %s\nFor document: %s' % (str(topics), doc['content']))
-        else:
-            fail += 1
+    for movie in movies_to_classify:
+        topics = [bank.shelf['topic_names'][label] for label in bank.classify_document(movie['content'])]
+    if len(topics):
+        logging.info('Topics : %s\nFor document: %s' % (str(topics), movie['content']))
+    else:
+        fail += 1
     logging.info('Managed to classify %i/%i documents.' %
-                 (len(reviews_to_classify) - fail, len(reviews_to_classify)))
+                 (len(movies_to_classify) - fail, len(movies_to_classify)))
     bank.close()
-
 
 if __name__ == '__main__':
     main()

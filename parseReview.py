@@ -92,45 +92,49 @@ class HtmlReviewParser(HTMLParser):
 class AmazonReviewsParser:
     @staticmethod
     def parse_review(string):
-        try:
-            string = string.replace('<br />', ' ')
-            parts = [part.split(': ')[1] for part in string.split('\n')[0:8]]
-            return {
-                'movie_id': parts[0],
-                'reviewer_id': parts[1],
-                'reviewer': parts[2],
-                'helpfulness': parts[3],
-                'score': parts[4],
-                'time': parts[5],
-                'summary': parts[6],
-                'review': parts[7]
-            }
-        except IndexError:
-            #print("Couldn't parse review : \n" + string)
-            return None
+        string = string.replace('<br />', ' ')
+        parts = [part.split(': ')[1] for part in string.split('\n')[0:8]]
+        review = {
+            'movie_id': parts[0],
+            'reviewer_id': parts[1],
+            'reviewer': parts[2],
+            'helpfulness': parts[3],
+            'score': parts[4],
+            'time': parts[5],
+            'summary': parts[6],
+            'review': parts[7]
+        }
+        return review
 
     @staticmethod
     def from_file(file, max_reviews=sys.maxsize):
         t0 = time()
         last_t = t0
         fail = 0
-        reviews = []
+        movies = {}
+        n_reviews = 0
         temp = ''
         with open(file, encoding='latin-1') as f:
-            while len(reviews) < max_reviews:
+            while n_reviews < max_reviews:
                 if time() - last_t > 10:
                     last_t = time()
-                    logging.info('%i reviews read, %i failed, in %is.' % (len(reviews), fail, last_t - t0))
+                    logging.info('%i reviews read for %i movies, %i failed, in %is.'
+                                 % (n_reviews, len(movies), fail, time() - t0))
                 temp2 = f.read(200)
                 if temp2 == '':
                     break
                 temp += temp2
                 while '\n\n' in temp:
                     review, temp = temp.split('\n\n', maxsplit=1)
-                    review = AmazonReviewsParser.parse_review(review)
-                    if review is not None:
-                        reviews.append(review)
-                    else:
+                    try:
+                        review = AmazonReviewsParser.parse_review(review)
+                        movie_id = review.pop('movie_id')
+                        if movie_id not in movies:
+                            movies[movie_id] = []
+                        movies[movie_id].append(review)
+                        n_reviews += 1
+                    except IndexError:
                         fail += 1
-        logging.info('Done : %i reviews read, %i failed, in %is.' % (len(reviews), fail, time() - t0))
-        return reviews
+        logging.info('Done : %i reviews read for %i movies, %i failed, in %is.'
+                     % (n_reviews, len(movies), fail, time() - t0))
+        return movies
