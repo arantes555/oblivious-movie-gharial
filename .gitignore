@@ -1,11 +1,8 @@
 # Custom
-resources/nltk_data
-resources/reviews_dataset
-resources/movies.txt
-resources/polarity_html.zip
-resources/stopwords.zip
-resources/stopwords
-
+resources
+!resources/movies_stopwords
+reports
+!reports/.gitempty
 .idea/
 *.tinydb
 *.shelf

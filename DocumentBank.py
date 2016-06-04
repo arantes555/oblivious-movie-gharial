@@ -245,7 +245,7 @@ class DocumentBank:
         for i in range(W.shape[0]):
             yv[i] = W[i].argmax()
             if W[i][int(yv[i])] < mml:
-                yv[i] = -1  # Assign topic_id -1 to poorly categorized mails
+                yv[i] = -1  # Assign topic_id -1 to poorly categorized documents
             counter[int(yv[i])] += 1
         logging.debug('Topics were assigned in %is' % int(time() - t3))
         # Display and store topics
@@ -264,7 +264,7 @@ class DocumentBank:
         self.tinydb.update(assign_topic, eids=[i + 1 for i in range(len(self.tinydb))])
         self.shelf.sync()
         logging.info('Database updated in %is' % int(time() - t4))
-        return H, W  # Return (H,W) matrix factors
+        return counter
 
     def train_classifiers_fullset(self, n_jobs=1, min_amount_relevant=10):
         """

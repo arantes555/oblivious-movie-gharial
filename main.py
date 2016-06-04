@@ -2,11 +2,21 @@ import config
 import logging
 from DocumentBank import DocumentBank, Movie
 from parseReview import HtmlReviewParser, AmazonReviewsParser
-from time import time
+from time import time, strftime
 import os
 import logger
 import utils
 from random import shuffle
+import json
+
+
+def date():
+    return strftime('%Y-%m-%d-%H:%M:%S')
+
+
+def write_report(report):
+    with open('reports/' + date() + '.json', 'w') as outfile:
+        json.dump(report, outfile, sort_keys=True, indent=2)
 
 
 def append_html_reviews_to_bank(bank, reviews_path, max_reviews):
@@ -49,6 +59,7 @@ def append_html_reviews_to_bank(bank, reviews_path, max_reviews):
 
 
 def main():
+    start_date = date()
     logger.initialize('.')
     bank = DocumentBank()
 
@@ -57,9 +68,9 @@ def main():
     stop_words.extend(utils.stop_words(config.PROJECT_STOP_WORDS_PATH))
     logging.info('Fetched %i stop words' % len(stop_words))
 
-    movies_reviews = AmazonReviewsParser.from_file(config.AMAZON_REVIEWS_FILE,
-                                                   max_reviews=(
-                                                       config.MAX_REVIEWS))
+    n_reviews, movies_reviews = AmazonReviewsParser.from_file(config.AMAZON_REVIEWS_FILE,
+                                                              max_reviews=(
+                                                                  config.MAX_REVIEWS))
     movies = [Movie(movie_id, [{
                                    'userID': review['reviewer_id'],
                                    'rating': review['score'],
@@ -76,25 +87,49 @@ def main():
 
     bank.vectorize(stop_words=stop_words, max_features=config.MAX_FEATURES)
 
-    bank.topic_extraction({'rank': config.N_TOPICS}, n_words=config.N_TOP_WORDS)
+    training_counter = bank.topic_extraction({'rank': config.N_TOPICS}, n_words=config.N_TOP_WORDS)
 
     bank.train_classifiers_fullset(n_jobs=config.N_JOBS,
                                    min_amount_relevant=int(config.MIN_RELEVANCE * len(movies_to_analyze)))
 
-    fail = 0
-    counter = dict((i, 0) for i in range(0, config.N_TOPICS))
+    topics = bank.shelf['topics']
+    classification_counter = dict((i, 0) for i in range(-1, config.N_TOPICS))
     for movie in movies_to_classify:
-        topics = [bank.shelf['topics'][topic_id] for topic_id in bank.classify_document(Movie(movie['id'], movie['reviews']).full_text())]
-        for topic in topics:
-            counter[topic.id] += 1
-        if len(topics):
-
-            logging.info('Topics : %s\nFor document: %s' % (str(topics), movie['id']))
+        movie_topics = [topics[topic_id] for topic_id in
+                        bank.classify_document(Movie(movie['id'], movie['reviews']).full_text())]
+        for topic in movie_topics:
+            classification_counter[topic.id] += 1
+        if len(movie_topics):
+            logging.info('Topics : %s\nFor document: %s' % (str(movie_topics), movie['id']))
         else:
-            fail += 1
-    logging.info(counter)
+            classification_counter[-1] += 1
+    logging.info(classification_counter)
     logging.info('Managed to classify %i/%i documents.' %
-                 (len(movies_to_classify) - fail, len(movies_to_classify)))
+                 (len(movies_to_classify) - classification_counter[-1], len(movies_to_classify)))
+
+    write_report({
+        'start_date': start_date,
+        'end_date': date(),
+        'params': {
+            'max_reviews': config.MAX_REVIEWS,
+            'max_features': config.MAX_FEATURES,
+            'min_relevance': config.MIN_RELEVANCE,
+            'n_topics': config.N_TOPICS,
+            'n_reviews': n_reviews,
+            'n_movies': len(movies),
+            'n_movies_training': len(movies_to_analyze),
+            'n_movies_classify': len(movies_to_classify),
+        },
+        'results': [{
+                        'topic': topics[topic_id].top_words,
+                        'training_movies_in_topic': training_counter[topic_id],
+                        'classification_movies_in_topic': classification_counter[topic_id]
+                    } for topic_id in topics] + [{
+                        'topic': ['No Topic'],
+                        'training_movies_in_topic': training_counter[-1],
+                        'classification_movies_in_topic': classification_counter[-1]
+                    }]
+    })
     bank.close()
 
 

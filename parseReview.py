@@ -92,8 +92,8 @@ class HtmlReviewParser(HTMLParser):
 class AmazonReviewsParser:
     @staticmethod
     def parse_review(string):
-        string = string.replace('<br />', ' ')\
-            .replace('<p>', '').replace('<p/>', '')\
+        string = string.replace('<br />', ' ') \
+            .replace('<p>', '').replace('<p/>', '') \
             .replace('<p >', '').replace('<p /', '')
         parts = [part.split(': ')[1] for part in string.split('\n')[0:8]]
         review = {
@@ -110,6 +110,7 @@ class AmazonReviewsParser:
 
     @staticmethod
     def from_file(file, max_reviews=sys.maxsize):
+        max_reviews = max_reviews or sys.maxsize
         t0 = time()
         last_t = t0
         fail = 0
@@ -139,4 +140,4 @@ class AmazonReviewsParser:
                         fail += 1
         logging.info('Done : %i reviews read for %i movies, %i failed, in %is.'
                      % (n_reviews, len(movies), fail, time() - t0))
-        return movies
+        return n_reviews, movies
