@@ -12,17 +12,18 @@ from sklearn.metrics import precision_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.svm import SVC
 from time import time
-from nltk.stem.snowball import SnowballStemmer
+# from nltk.stem.snowball import SnowballStemmer
 from nltk.tokenize import RegexpTokenizer
+from nltk.stem import WordNetLemmatizer
 
 with warnings.catch_warnings(record=True) as w:
     from nimfa import Snmf
 
 
 def tokenizer(text):
-    stemmer = SnowballStemmer('english', ignore_stopwords=True)
+    stemmer = WordNetLemmatizer()
     _tokenizer = RegexpTokenizer(r'\w+')
-    return [stemmer.stem(word) for word in _tokenizer.tokenize(text)]
+    return [stemmer.lemmatize(word) for word in _tokenizer.tokenize(text)]
 
 
 class Movie:
