@@ -60,15 +60,18 @@ def append_html_reviews_to_bank(bank, reviews_path, max_reviews):
 
 
 def main():
+    # Initialization
     start_date = date()
     logger.initialize('.')
     bank = DocumentBank()
 
+    # Fetching stopwords
     logging.info('Fetching stop words')
     stop_words = utils.stop_words(config.LANGUAGE_STOP_WORDS_PATH)
     stop_words.extend(utils.stop_words(config.PROJECT_STOP_WORDS_PATH))
     logging.info('Fetched %i stop words' % len(stop_words))
 
+    # Read reviews from disk
     n_reviews, movies_reviews = AmazonReviewsParser.from_file(config.AMAZON_REVIEWS_FILE,
                                                               max_reviews=(
                                                                   config.MAX_REVIEWS))
@@ -79,35 +82,45 @@ def main():
                                } for review in reviews])
               for movie_id, reviews in movies_reviews.items()]
 
+    # Shuffle the array, so that the movies to classify at the end aren't biased
     shuffle(movies)
 
+    # Separate movies to add to the bank (and add them to it), and movies to classify afterwards
     movies_to_analyze = [movie.serialize() for movie in movies[:-config.MOVIES_TO_CLASSIFY]]
     movies_to_classify = [movie.serialize() for movie in movies[-config.MOVIES_TO_CLASSIFY:]]
     logging.info('Analyzing %i movies' % len(movies_to_analyze))
     bank.add_documents(movies_to_analyze)
 
+    # First vectorize the dataset
     bank.vectorize(stop_words=stop_words, max_features=config.MAX_FEATURES)
 
+    # Then extract topics and assign them to movies in the dataset
     training_counter = bank.topic_extraction({'rank': config.N_TOPICS}, n_words=config.N_TOP_WORDS)
 
+    # Train the classifiers with the assigned topics
     bank.train_classifiers_fullset(n_jobs=config.N_JOBS,
                                    min_amount_relevant=int(config.MIN_RELEVANCE * len(movies_to_analyze)))
 
+    # Retrieving results
     topics = bank.shelf['topics']
-    classification_counter = dict((i, 0) for i in range(-1, config.N_TOPICS))
+    classification_counter = dict((i, []) for i in range(-1, config.N_TOPICS))
     for movie in movies_to_classify:
         movie_topics = [topics[topic_id] for topic_id in
                         bank.classify_document(Movie(movie['id'], movie['reviews']).full_text())]
         for topic in movie_topics:
-            classification_counter[topic.id] += 1
+            classification_counter[topic.id].append(movie['id'])
         if len(movie_topics):
-            logging.info('Topics : %s\nFor document: %s' % (str(movie_topics), movie['id']))
+            logging.info('Topics for document: %s: %s' % (movie['id'], str(movie_topics)))
         else:
-            classification_counter[-1] += 1
-    logging.info(classification_counter)
-    logging.info('Managed to classify %i/%i documents.' %
-                 (len(movies_to_classify) - classification_counter[-1], len(movies_to_classify)))
+            classification_counter[-1].append(movie['id'])
+    for topic in classification_counter.keys():
+        logging.info('Topic #%i: %i movies assigned' % (topic, len(classification_counter[topic])))
+    logging.info('Managed to classify %i%% of the documents.' %
+                 int((len(movies_to_classify) - len(classification_counter[-1])) / len(movies_to_classify) * 100))
+
+    # Writing results to JSON
     report_filename = date()
+
     write_report(report_filename, {
         'start_date': start_date,
         'end_date': date(),

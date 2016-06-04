@@ -241,20 +241,21 @@ class DocumentBank:
         # Calculate a best topic_id for each document, if too poor, associate -1
         yv = zeros(W.shape[0])
         mml = W.mean()
-        counter = dict((i, 0) for i in range(-1, options['rank']))
+        counter = dict((i, []) for i in range(-1, options['rank']))
         for i in range(W.shape[0]):
+            movie_id = self.tinydb.get(eid=i+1)['id']
             yv[i] = W[i].argmax()
             if W[i][int(yv[i])] < mml:
                 yv[i] = -1  # Assign topic_id -1 to poorly categorized documents
-            counter[int(yv[i])] += 1
+            counter[int(yv[i])].append(movie_id)
         logging.debug('Topics were assigned in %is' % int(time() - t3))
         # Display and store topics
         for topic_idx, topic in enumerate(H):
             _topic = Topic(int(topic_idx), [self.shelf['dictionnary'][i]
                                             for i in topic.argsort()[:-n_words - 1:-1]])
             self.shelf['topics'][int(topic_idx)] = _topic
-            logging.info('Topic #%i - %i movies: %s' % (_topic.id, counter[_topic.id], " ".join(_topic.top_words)))
-        logging.info('%i movie(s) were unassigned' % counter[-1])
+            logging.info('Topic #%i - %i movies: %s' % (_topic.id, len(counter[_topic.id]), " ".join(_topic.top_words)))
+        logging.info('%i movie(s) were unassigned' % len(counter[-1]))
         logging.info('Updating database...')
         t4 = time()
 
