@@ -54,6 +54,19 @@ class Movie:
         }
 
 
+class Topic:
+    def __init__(self, _id, top_words):
+        self.id = _id
+        self.top_words = top_words
+
+    def __str__(self):
+        top_words = " ".join(self.top_words)
+        return "Topic #%i: %s" % (self.id, top_words)
+
+    def __repr__(self):
+        return self.__str__()
+
+
 class DocumentBank:
     """
     Main class for storing documents and working on them
@@ -86,8 +99,8 @@ class DocumentBank:
 
         if reset:
             logging.debug('Initializing topic names')
-            self.shelf['topic_names'] = {
-                -1: 'No Topic'
+            self.shelf['topics'] = {
+                -1: Topic(-1, [])
             }
             logging.debug('Initializing vectorizer')
             self.shelf['vectorizer'] = None
@@ -237,14 +250,11 @@ class DocumentBank:
         logging.debug('Topics were assigned in %is' % int(time() - t3))
         # Display and store topics
         for topic_idx, topic in enumerate(H):
-            topbuf = " ".join(
-                [self.shelf['dictionnary'][i]
-                 for i in topic.argsort()[:-n_words - 1:-1]]
-            )
-            topic_name = "Topic #%i: %s" % (topic_idx, topbuf)
-            self.shelf['topic_names'][int(topic_idx)] = topic_name
+            _topic = Topic(int(topic_idx), [self.shelf['dictionnary'][i]
+                                            for i in topic.argsort()[:-n_words - 1:-1]])
+            self.shelf['topics'][int(topic_idx)] = _topic
             logging.info('Assigned %i movie(s) to topic:' % counter[int(topic_idx)])
-            logging.info(topic_name)
+            logging.info('Topic #%i - %i movies: %s' % (_topic.id, counter[_topic.id], " ".join(_topic.top_words)))
         logging.info('%i movie(s) were unassigned' % counter[-1])
         logging.info('Updating database...')
         t4 = time()
@@ -253,6 +263,7 @@ class DocumentBank:
             element['topic_ids'] = [int(yv[element.eid - 1])]
 
         self.tinydb.update(assign_topic, eids=[i + 1 for i in range(len(self.tinydb))])
+        self.shelf.sync()
         logging.info('Database updated in %is' % int(time() - t4))
         return H, W  # Return (H,W) matrix factors
 
@@ -263,10 +274,10 @@ class DocumentBank:
         min_amount_relevant = max(5, min_amount_relevant)
         logging.info('Start training classifiers with a minimum relevance of %i' % min_amount_relevant)
         # Compute classifier for each label (except -1, which is no label)
-        topic_ids = (topic_id for topic_id in self.shelf['topic_names'].keys() if topic_id != -1)
+        topic_ids = (topic.id for topic in self.shelf['topics'].values() if topic.id != -1)
         self.shelf['classifiers'] = {}
         for topic_id in topic_ids:
-            logging.debug('Working on topic #%i out of %i' % (topic_id, len(self.shelf['topic_names']) - 1))
+            logging.debug('Working on topic #%i out of %i' % (topic_id, len(self.shelf['topics']) - 1))
             yvc = self._generate_yvc(topic_id)
             # Check if enough positives
             length = len(yvc)  # 2 * (amount of films with topic_id) - amount of films

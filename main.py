@@ -84,12 +84,12 @@ def main():
     fail = 0
     counter = dict((i, 0) for i in range(0, config.N_TOPICS))
     for movie in movies_to_classify:
-        topic_ids = [topic_id for topic_id in bank.classify_document(Movie(movie['id'], movie['reviews']).full_text())]
-        topic_names = [bank.shelf['topic_names'][topic_id] for topic_id in topic_ids]
-        for topic_id in topic_ids:
-            counter[topic_id] += 1
-        if len(topic_names):
-            logging.info('Topics : %s\nFor document: %s' % (str(topic_names), movie['id']))
+        topics = [bank.shelf['topics'][topic_id] for topic_id in bank.classify_document(Movie(movie['id'], movie['reviews']).full_text())]
+        for topic in topics:
+            counter[topic.id] += 1
+        if len(topics):
+
+            logging.info('Topics : %s\nFor document: %s' % (str(topics), movie['id']))
         else:
             fail += 1
     logging.info(counter)
