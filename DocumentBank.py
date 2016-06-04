@@ -19,11 +19,12 @@ from nltk.stem import WordNetLemmatizer
 with warnings.catch_warnings(record=True) as w:
     from nimfa import Snmf
 
+_stemmer = WordNetLemmatizer()
+_tokenizer = RegexpTokenizer(r'\w+')
+
 
 def tokenizer(text):
-    stemmer = WordNetLemmatizer()
-    _tokenizer = RegexpTokenizer(r'\w+')
-    return [stemmer.lemmatize(word) for word in _tokenizer.tokenize(text)]
+    return [_stemmer.lemmatize(word) for word in _tokenizer.tokenize(text)]
 
 
 class Movie:
@@ -139,7 +140,7 @@ class DocumentBank:
         :type max_features: int
         """
         logging.info('Start vectorizing...')
-
+        t0 = time()
         self.shelf['vectorizer'] = CountVectorizer(decode_error='ignore',
                                                    tokenizer=tokenizer,
                                                    strip_accents='unicode',
@@ -162,7 +163,7 @@ class DocumentBank:
 
         # Inverse the vectorized vocabulary
         self.shelf['dictionnary'] = self.shelf['vectorizer'].get_feature_names()
-        logging.info('Vectorizing done')
+        logging.info('Vectorizing done in %is' % int(time() - t0))
         self.shelf.sync()
 
     def topic_extraction(self, options=None, n_words=12):
@@ -203,27 +204,35 @@ class DocumentBank:
             default_options.update(options)
         options = default_options
 
-        logging.info('Starting topic extraction')
+        logging.info('Starting topic extraction...')
+
+        logging.debug('Selecting features...')
         # Basic feature selection
+        t0 = time()
         keepwords = min(1000, self.shelf['features_matrix'].shape[1])
         logging.info('TF-IDF transforming the features matrix')
         m_tfidf = sktext.TfidfTransformer().fit_transform(self.shelf['features_matrix'])
         wrdtf = sum(m_tfidf).toarray()
         idx = argsort(wrdtf)[0][-keepwords:]
         data_ms = self.shelf['features_matrix'].tocsc()[:, idx]
+        logging.debug('Feature selection done in %is' % int(time() - t0))
 
         logging.info('Running the matrix factorization...')
-        t0 = time()
+        t1 = time()
         fctr = Snmf(data_ms, **options)
         fctr_res = fctr()
-        logging.info('Matrix factorization done in %is' % int(time() - t0))
+        logging.info('Matrix factorization done in %is' % int(time() - t1))
 
+        logging.debug('Formatting results...')
+        t2 = time()
         rbas = fctr.coef().toarray()
         bas = zeros((rbas.shape[0], self.shelf['features_matrix'].shape[1]))
         bas[:, idx] = rbas
-
         (H, W) = bas, fctr_res.basis().toarray()
+        logging.debug('Results formatted in %is' % int(time() - t2))
 
+        logging.debug('Assigning topics to each entry...')
+        t3 = time()
         # Calculate a best topic_id for each document, if too poor, associate -1
         yv = zeros(W.shape[0])
         mml = W.mean()
@@ -231,6 +240,7 @@ class DocumentBank:
             yv[i] = W[i].argmax()
             if W[i][int(yv[i])] < mml:
                 yv[i] = -1  # Assign topic_id -1 to poorly categorized mails
+        logging.debug('Topics were assigned in %is' % int(time() - t3))
 
         # Display and store topics
         for topic_idx, topic in enumerate(H):
@@ -243,35 +253,37 @@ class DocumentBank:
             logging.info(topic_name)
 
         logging.info('Updating database...')
-        for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
-            self.tinydb.update({'topic_ids': [int(yv[document.eid - 1])]}, eids=[document.eid])
+        t4 = time()
+
+        def assign_topic(element):
+            element['topic_ids'] = [int(yv[element.eid - 1])]
+
+        self.tinydb.update(assign_topic, eids=[i + 1 for i in range(len(self.tinydb))])
+        logging.info('Database updated in %is' % int(time() - t4))
         return H, W  # Return (H,W) matrix factors
 
-    def train_classifiers_fullset(self):
+    def train_classifiers_fullset(self, n_jobs=1):
         """
         Trains the classifiers on the generated topics
         """
         logging.info('Start training classifiers')
-        # Get list of labels from email versus label dict
-        topic_ids = dict([(topic_id, [])
-                          for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid)
-                          for topic_id in document['topic_ids']])
-        logging.info('Dict of labels computed with size %i' % len(list(topic_ids.keys())))
         # Compute classifier for each label (except -1, which is no label)
+        topic_ids = (topic_id for topic_id in self.shelf['topic_names'].keys() if topic_id != -1)
         self.shelf['classifiers'] = {}
-        for topic_id in topic_ids.keys():
-            logging.debug('Working on topic %s' % str(topic_id))
-            if not topic_id == -1.0:  # TODO : Separate in multiple functions ...
-                yvc = self._generate_yvc(topic_id)
-                logging.debug('generated YVC')
-                # Check if enough positives
-                length = len(yvc)
-                total = sum(yvc)
-                if total > -length + 20:  # TODO : "-len(yvc) + 20" ? Oo
-                    logging.debug('Respects strange condition')
-                    # Launch classifier on feature matrix
-                    ratio = (length - total) / (length + total)
-                    self._classify(topic_id, yvc, ratio)
+        for topic_id in topic_ids:
+            logging.debug('Working on topic #%i out of %i' % (topic_id, len(self.shelf['topic_names']) - 1))
+            yvc = self._generate_yvc(topic_id)
+            # Check if enough positives
+            length = len(yvc)
+            total = sum(yvc)
+            if total + length > 20:
+                t0 = time()
+                logging.debug('Generating classifier for topic #%i' % topic_id)
+                # Launch classifier on feature matrix
+                self._classify(topic_id, yvc, (length - total) / (length + total), n_jobs)
+                logging.info('Classifier #%i generated in %is' % (topic_id, int(time() - t0)))
+            else:
+                logging.info('Aborting classifier generation for topic #%i because it\'s not relevant' % topic_id)
 
     def _generate_yvc(self, topic_id):
         """
@@ -280,15 +292,18 @@ class DocumentBank:
         :type topic_id: int
         """
         yvc = []
-        # Scan each message in msg_id list (ordered as in DataM)
+        logging.debug('Generating YVC...')
+        t0 = time()
+        # Scan each message in msg_id list
         for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
             if topic_id in document['topic_ids']:
                 yvc.append(1)
             else:
                 yvc.append(-1)
+        logging.debug('YVC generated in %is' % int(time() - t0))
         return yvc
 
-    def _classify(self, topic_id, yvc, ratio):
+    def _classify(self, topic_id, yvc, ratio, n_jobs):
         """
         Helper method for "train_classifiers_fullset". Should not be used directly.
         :param topic_id: ID of the current topic.
@@ -298,15 +313,17 @@ class DocumentBank:
         :param ratio: Ratio of the yvc.
         :type ratio: float
         """
-        logging.debug('Starting GridSearch on topic id %s' % topic_id)
+        logging.debug('Starting GridSearch on topic id %i ...' % topic_id)
+        t0 = time()
         param_grid = [{'C': [0.1, 1, 10, 100], 'kernel': ['linear']}]
-        scores = [('precision', precision_score)]  # TODO: refine SVM scores
-        clf = GridSearchCV(SVC(C=1, class_weight={1: ratio}), param_grid, cv=5)
+        clf = GridSearchCV(SVC(C=1, class_weight={1: ratio}), param_grid, cv=5, n_jobs=n_jobs)
         clf.fit(self.shelf['features_matrix'], array(yvc))
+        logging.debug('GridSearch on topic id %i done in %is' % (topic_id, int(time() - t0)))
+
         # Store best classifier in dict
         self.shelf['classifiers'][topic_id] = clf.best_estimator_
         # Report results
-        logging.debug('GridSearch done')
+        scores = [('precision', precision_score)]  # TODO: refine SVM scores
         for score_name, score_func in scores:
             logging.debug("GridSearch on %s" % score_name)
             logging.debug("Best parameters set found on development set:")

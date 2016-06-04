@@ -74,7 +74,7 @@ def main():
 
     bank.topic_extraction(n_words=config.N_TOP_WORDS)
 
-    bank.train_classifiers_fullset()
+    bank.train_classifiers_fullset(n_jobs=config.N_JOBS)
 
     fail = 0
     for movie in movies_to_classify:
