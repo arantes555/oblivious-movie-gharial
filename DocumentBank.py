@@ -12,9 +12,44 @@ from sklearn.metrics import precision_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.svm import SVC
 from time import time
-
+from nltk.stem.snowball import EnglishStemmer
+from nltk.tokenize import word_tokenize
 with warnings.catch_warnings(record=True) as w:
     from nimfa import Snmf
+
+
+def stem(text):
+    stemmer = EnglishStemmer(ignore_stopwords=True)
+    return " ".join([stemmer.stem(word) for word in word_tokenize(text)])
+
+
+class Movie:
+    def __init__(self, id, reviews=None):
+        self.id = id
+        if reviews is not None:
+            self.reviews = reviews
+        else:
+            self.reviews = []
+
+    def add_review(self, userID, rating, review):
+        self.reviews.append({
+            'userID': userID,
+            'rating': rating,
+            'review': stem(review)
+        })
+
+    def _generate_full_text(self):
+        for review in self.reviews:
+            yield review
+
+    def full_text(self):
+        return ' '.join(self._generate_full_text())
+
+    def serialize(self):
+        return {
+            'id': self.id,
+            'reviews': self.reviews
+        }
 
 
 class DocumentBank:
