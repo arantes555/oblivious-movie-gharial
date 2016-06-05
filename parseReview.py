@@ -141,3 +141,64 @@ class AmazonReviewsParser:
         logging.info('Done : %i reviews read for %i movies, %i failed, in %is.'
                      % (n_reviews, len(movies), fail, time() - t0))
         return n_reviews, movies
+
+    @staticmethod
+    def parse_metadata(file):
+        logging.info('Reading metadata file ...')
+        t0 = time()
+        products = {}
+        with open(file) as f:
+            for l in f:
+                metadata = eval(l)
+                product_id = metadata.pop('asin')
+                products[product_id] = metadata
+        logging.info('%i products read in %is.' % (len(products), time() - t0))
+        return products
+
+    @staticmethod
+    def from_json(file, meta=None, max_reviews=sys.maxsize):
+        meta = AmazonReviewsParser.parse_metadata(meta) if meta is not None else None
+        max_reviews = max_reviews or sys.maxsize
+        t0 = time()
+        last_t = t0
+        fail = 0
+        movies = {}
+        n_reviews = 0
+        n_movies_with_title = 0
+        logging.info('Reading reviews ...')
+        with open(file) as f:
+            for l in f:
+                if n_reviews >= max_reviews:
+                    break
+                if time() - last_t > 10:
+                    last_t = time()
+                    logging.info('%i reviews read for %i movies, %i failed, in %is.'
+                                 % (n_reviews, len(movies), fail, time() - t0))
+                try:
+                    review = eval(l)
+                    movie_id = review.pop('asin')
+                    if movie_id not in movies:
+                        movies[movie_id] = {
+                            'title': '',
+                            'reviews': []
+                        }
+                        if meta is not None and movie_id in meta and 'title' in meta[movie_id]:
+                            movies[movie_id]['title'] = meta[movie_id]['title']
+                            n_movies_with_title += 1
+                    movies[movie_id]['reviews'].append({
+                        'reviewer_id': review['reviewerID'],
+                        'reviewer': review['reviewerName'] if 'reviewerName'
+                                                              in review else 'Unnamed' + review['reviewerID'],
+                        'helpfulness': review['helpful'],
+                        'score': review['overall'],
+                        'time': review['unixReviewTime'],
+                        'summary': review['summary'],
+                        'review': review['reviewText']
+                    })
+                    n_reviews += 1
+                except KeyError as e:
+                    fail += 1
+                    logging.info('Fail !\nData:' + l + '\nError:\n' + str(e))
+        logging.info('Done : %i reviews read for %i movies (%i%% with titles), %i failed, in %is.'
+                     % (n_reviews, len(movies), n_movies_with_title * 100 / len(movies), fail, time() - t0))
+        return n_reviews, movies

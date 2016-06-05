@@ -28,8 +28,9 @@ def tokenizer(text):
 
 
 class Movie:
-    def __init__(self, movie_id, reviews=None):
+    def __init__(self, movie_id, title, reviews=None):
         self.id = movie_id
+        self.title = title
         self.reviews = []
         if reviews is not None:
             self.reviews.extend(reviews)
@@ -51,6 +52,7 @@ class Movie:
     def serialize(self):
         return {
             'id': self.id,
+            'title': self.title,
             'reviews': self.reviews
         }
 
@@ -155,7 +157,7 @@ class DocumentBank:
             :return: Generator yielding all the documents content
             """
             for movie in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
-                yield Movie(movie['id'], movie['reviews']).full_text()
+                yield Movie(movie['id'], movie['title'], movie['reviews']).full_text()
 
         features_matrix = self.shelf['vectorizer'].fit_transform(corpus())
 

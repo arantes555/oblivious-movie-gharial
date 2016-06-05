@@ -72,15 +72,15 @@ def main():
     logging.info('Fetched %i stop words' % len(stop_words))
 
     # Read reviews from disk
-    n_reviews, movies_reviews = AmazonReviewsParser.from_file(config.AMAZON_REVIEWS_FILE,
-                                                              max_reviews=(
-                                                                  config.MAX_REVIEWS))
-    movies = [Movie(movie_id, [{
+    n_reviews, movies_reviews = AmazonReviewsParser.from_json(config.AMAZON_REVIEWS_FILE,
+                                                              meta=config.METADATA_FILE,
+                                                              max_reviews=config.MAX_REVIEWS)
+    movies = [Movie(movie_id, movie['title'], [{
                                    'userID': review['reviewer_id'],
                                    'rating': review['score'],
                                    'review': review['review']
-                               } for review in reviews])
-              for movie_id, reviews in movies_reviews.items()]
+                               } for review in movie['reviews']])
+              for movie_id, movie in movies_reviews.items()]
 
     # Shuffle the array, so that the movies to classify at the end aren't biased
     shuffle(movies)
