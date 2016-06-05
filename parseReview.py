@@ -162,13 +162,6 @@ class AmazonReviewsParser:
     @staticmethod
     def from_json(file, meta=None, max_reviews=sys.maxsize):
         meta = AmazonReviewsParser.parse_metadata(meta) if meta is not None else None
-        # i = 0
-        # for product_id, product in meta.items():
-        #     if 'title' in product:
-        #         print('Title: %s ; Categories: %s' % (product['title'], product['categories'][0]))
-        #         i += 1
-        #         if i > 200:
-        #             break
         max_reviews = max_reviews or sys.maxsize
         t0 = time()
         last_t = t0
@@ -176,7 +169,22 @@ class AmazonReviewsParser:
         movies = {}
         n_reviews = 0
         n_movies_with_title = 0
-        n_not_movie = {}
+        not_movies = {}
+
+        def log(done=False):
+            n_movies = len(movies)
+            n_not_movies = len(not_movies)
+            n_reviews_not_movies = sum(not_movies.values())
+            logging.info(('Done: ' if done else '') + '%i reviews read for %i movies (%i%% with titles,'
+                         ' %i%% of products for %i%% of reviews were not movies), %i failed, in %is.'
+                         % (n_reviews,
+                            n_movies,
+                            n_movies_with_title * 100 / n_movies,
+                            n_not_movies * 100 / (n_movies + n_not_movies),
+                            n_reviews_not_movies * 100 / (n_reviews_not_movies + n_reviews),
+                            fail,
+                            time() - t0))
+
         logging.info('Reading reviews ...')
         with open(file) as f:
             for l in f:
@@ -184,8 +192,7 @@ class AmazonReviewsParser:
                     break
                 if time() - last_t > 10:
                     last_t = time()
-                    logging.info('%i reviews read for %i movies, %i failed, in %is.'
-                                 % (n_reviews, len(movies), fail, time() - t0))
+                    log()
                 try:
                     review = eval(l)
                     movie_id = review.pop('asin')
@@ -194,7 +201,7 @@ class AmazonReviewsParser:
                         if meta is not None:
                             movie_meta = meta[movie_id]
                             if 'Movies' not in movie_meta['categories'][0]:
-                                n_not_movie[movie_id] = n_not_movie[movie_id] + 1 if movie_id in n_not_movie else 1
+                                not_movies[movie_id] = not_movies[movie_id] + 1 if movie_id in not_movies else 1
                                 raise ParsingError('Not a movie')
                         movies[movie_id] = {
                             'title': movie_meta['title'] if movie_meta and 'title' in movie_meta else '',
@@ -218,14 +225,5 @@ class AmazonReviewsParser:
                     logging.info('Fail !\nData:' + l + '\nError:\n' + str(e))
                 except ParsingError:
                     pass
-
-        logging.info('Done : %i reviews read for %i movies (%i%% with titles,'
-                     ' %i products for %i reviews were not movies), %i failed, in %is.'
-                     % (n_reviews,
-                        len(movies),
-                        n_movies_with_title * 100 / len(movies),
-                        len(n_not_movie),
-                        sum(n_not_movie.values()),
-                        fail,
-                        time() - t0))
+        log(done=True)
         return n_reviews, movies
