@@ -95,7 +95,7 @@ def main():
     bank.vectorize(stop_words=stop_words, max_features=config.MAX_FEATURES)
 
     # Then extract topics and assign them to movies in the dataset
-    training_counter = bank.topic_extraction({'rank': config.N_TOPICS}, n_words=config.N_TOP_WORDS)
+    training_counter = bank.topic_extraction({'rank': config.N_TOPICS, 'beta': config.BETA}, n_words=config.N_TOP_WORDS)
 
     # Train the classifiers with the assigned topics
     bank.train_classifiers_fullset(n_jobs=config.N_JOBS,
@@ -133,16 +133,17 @@ def main():
             'n_movies': len(movies),
             'n_movies_training': len(movies_to_analyze),
             'n_movies_classify': len(movies_to_classify),
+            'beta': config.BETA,
         },
         'results': [{
                         'topic': topics[topic_id].top_words,
                         'training_movies_in_topic': training_counter[topic_id],
                         'classification_movies_in_topic': classification_counter[topic_id]
                     } for topic_id in topics] + [{
-                        'topic': ['No Topic'],
-                        'training_movies_in_topic': training_counter[-1],
-                        'classification_movies_in_topic': classification_counter[-1]
-                    }]
+            'topic': ['No Topic'],
+            'training_movies_in_topic': training_counter[-1],
+            'classification_movies_in_topic': classification_counter[-1]
+        }]
     })
     bank.close()
     copyfile('./all.log', './reports/%s.log' % report_filename)

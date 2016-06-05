@@ -254,7 +254,7 @@ class DocumentBank:
             'eta': 1.0,
             # It controls sparseness. Larger beta generates higher sparseness on H. Too large :param:`beta` is not
             # recommended. It should have positive value. Default value is 1e-4.
-            'beta': 1e+2
+            'beta': 1e-4
         }
         if options is not None:
             default_options.update(options)

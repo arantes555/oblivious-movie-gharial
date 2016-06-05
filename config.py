@@ -4,19 +4,22 @@ import os
 MIN_RELEVANCE = 0.001
 
 # Amount of reviews to analyse to train the classifiers
-MAX_REVIEWS = 2000
+MAX_REVIEWS = 100000
 
 # Movies to classify after the model is trained
-MOVIES_TO_CLASSIFY = 10
+MOVIES_TO_CLASSIFY = 100
 
 # Maximum amount of words in the dictionnary
-MAX_FEATURES = 2000
+MAX_FEATURES = 5000
 
 # Amount of topics to extract, keep it relatively low
-N_TOPICS = 10
+N_TOPICS = 20
 
 # Amount of words to display for each topic, doesn't affect anything except printing
-N_TOP_WORDS = 12
+N_TOP_WORDS = 15
+
+# Parameter that controls spareness
+BETA = 1e-4
 
 HTML_REVIEWS_DIR = './resources/reviews_dataset/'
 
