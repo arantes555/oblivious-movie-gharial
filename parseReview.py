@@ -5,6 +5,10 @@ from time import time
 import logging
 
 
+class ParsingError(Exception):
+    pass
+
+
 # create a subclass and override the handler methods
 class HtmlReviewParser(HTMLParser):
     def error(self, message):
@@ -158,6 +162,13 @@ class AmazonReviewsParser:
     @staticmethod
     def from_json(file, meta=None, max_reviews=sys.maxsize):
         meta = AmazonReviewsParser.parse_metadata(meta) if meta is not None else None
+        # i = 0
+        # for product_id, product in meta.items():
+        #     if 'title' in product:
+        #         print('Title: %s ; Categories: %s' % (product['title'], product['categories'][0]))
+        #         i += 1
+        #         if i > 200:
+        #             break
         max_reviews = max_reviews or sys.maxsize
         t0 = time()
         last_t = t0
@@ -165,6 +176,7 @@ class AmazonReviewsParser:
         movies = {}
         n_reviews = 0
         n_movies_with_title = 0
+        n_not_movie = {}
         logging.info('Reading reviews ...')
         with open(file) as f:
             for l in f:
@@ -177,13 +189,18 @@ class AmazonReviewsParser:
                 try:
                     review = eval(l)
                     movie_id = review.pop('asin')
+                    movie_meta = None
                     if movie_id not in movies:
+                        if meta is not None:
+                            movie_meta = meta[movie_id]
+                            if 'Movies' not in movie_meta['categories'][0]:
+                                n_not_movie[movie_id] = n_not_movie[movie_id] + 1 if movie_id in n_not_movie else 1
+                                raise ParsingError('Not a movie')
                         movies[movie_id] = {
-                            'title': '',
+                            'title': movie_meta['title'] if movie_meta and 'title' in movie_meta else '',
                             'reviews': []
                         }
-                        if meta is not None and movie_id in meta and 'title' in meta[movie_id]:
-                            movies[movie_id]['title'] = meta[movie_id]['title']
+                        if movie_meta and 'title' in movie_meta:
                             n_movies_with_title += 1
                     movies[movie_id]['reviews'].append({
                         'reviewer_id': review['reviewerID'],
@@ -199,6 +216,16 @@ class AmazonReviewsParser:
                 except KeyError as e:
                     fail += 1
                     logging.info('Fail !\nData:' + l + '\nError:\n' + str(e))
-        logging.info('Done : %i reviews read for %i movies (%i%% with titles), %i failed, in %is.'
-                     % (n_reviews, len(movies), n_movies_with_title * 100 / len(movies), fail, time() - t0))
+                except ParsingError:
+                    pass
+
+        logging.info('Done : %i reviews read for %i movies (%i%% with titles,'
+                     ' %i products for %i reviews were not movies), %i failed, in %is.'
+                     % (n_reviews,
+                        len(movies),
+                        n_movies_with_title * 100 / len(movies),
+                        len(n_not_movie),
+                        sum(n_not_movie.values()),
+                        fail,
+                        time() - t0))
         return n_reviews, movies
