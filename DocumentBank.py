@@ -1,13 +1,13 @@
 import shelve
 import logging
-from sklearn.feature_extraction.text import CountVectorizer
+import utils
 from tinydb import TinyDB
 from tinydb.storages import JSONStorage
 from tinydb.middlewares import CachingMiddleware
-import utils
-import warnings
+
 from numpy import argsort, zeros, array
-import sklearn.feature_extraction.text as sktext
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.metrics import precision_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.svm import SVC
@@ -15,6 +15,7 @@ from time import time
 from nltk.tokenize import RegexpTokenizer
 from nltk.stem import WordNetLemmatizer
 
+import warnings
 with warnings.catch_warnings(record=True) as w:
     from nimfa import Snmf
 
@@ -112,20 +113,14 @@ class DocumentBank:
             self.shelf['classifiers'] = None
             self.shelf.sync()
 
-    def add_document(self, content, metadata):
+    def add_document(self, movie):
         """
         Add a single document to the bank
-        :param content: content of the document
-        :type content: str
-        :param metadata: metadata around document
-        :type metadata: dict
+        :param movie: movie to add
+        :type movie: Movie
         """
         logging.debug('Inserting single document to tinydb')
-        self.tinydb.insert({
-            'metadata': metadata,
-            'content': content,
-            'topic_ids': []
-        })
+        self.tinydb.insert(movie.serialize())
 
     def add_documents(self, documents):
         """
@@ -171,6 +166,62 @@ class DocumentBank:
         logging.info('Vectorizing done in %is' % int(time() - t0))
         self.shelf.sync()
 
+    def _select_features(self):
+        """
+        Basic feature selection
+        :return:
+        """
+        logging.debug('Selecting features...')
+        t0 = time()
+        logging.info('TF-IDF transforming the features matrix')
+        m_tfidf = TfidfTransformer().fit_transform(self.shelf['features_matrix'])
+        # TODO: dafuq is this sum ?
+        wrdtf = sum(m_tfidf).toarray()
+        # Keep 1000 words or less # TODO: dafuq ?
+        keepwords = min(1000, self.shelf['features_matrix'].shape[1])
+        # Get the `keepwords` first ids of the sorted wrdftf matrix
+        # TODO: understand precisley what happens here with argsort
+        idx = argsort(wrdtf)[0][-keepwords:]
+        # TODO: Why transforming it into a CSC (compressed by column) instead keeping it a CSR (by rows)...
+        # Only keeping the entries (rows or colums) corresponding to the kept words
+        data_ms = self.shelf['features_matrix'].tocsc()[:, idx]
+        logging.debug('Feature selection done in %is' % int(time() - t0))
+        return data_ms, idx
+
+    def _assign_topics(self, H, W, rank, n_words):
+        logging.debug('Assigning topics to each entry...')
+        t3 = time()
+        # Calculate a best topic_id for each document, if too poor, associate -1
+        yv = zeros(W.shape[0])
+        mml = W.mean()
+        counter = dict((i, []) for i in range(-1, rank))
+        for i in range(W.shape[0]):
+            movie_id = self.tinydb.get(eid=i + 1)['id']
+            yv[i] = W[i].argmax()
+            if W[i][int(yv[i])] < mml:
+                yv[i] = -1  # Assign topic_id -1 to poorly categorized documents
+            counter[int(yv[i])].append(movie_id)
+        logging.debug('Topics were assigned in %is' % int(time() - t3))
+
+        # Display and store topics
+        for topic_idx, topic in enumerate(H):
+            _topic = Topic(int(topic_idx), [self.shelf['dictionnary'][i]
+                                            for i in topic.argsort()[:-n_words - 1:-1]])
+            self.shelf['topics'][int(topic_idx)] = _topic
+            logging.info('Topic #%i - %i movies: %s' % (_topic.id, len(counter[_topic.id]), " ".join(_topic.top_words)))
+        logging.info('%i movie(s) were unassigned' % len(counter[-1]))
+
+        logging.info('Updating database...')
+        t4 = time()
+
+        def assign_topic(element):
+            element['topic_ids'] = [int(yv[element.eid - 1])]
+
+        self.tinydb.update(assign_topic, eids=[i + 1 for i in range(len(self.tinydb))])
+        self.shelf.sync()
+        logging.info('Database updated in %is' % int(time() - t4))
+        return counter
+
     def topic_extraction(self, options=None, n_words=12):
         """
 
@@ -210,62 +261,25 @@ class DocumentBank:
         options = default_options
 
         logging.info('Starting topic extraction...')
-
-        logging.debug('Selecting features...')
-        # Basic feature selection
-        t0 = time()
-        keepwords = min(1000, self.shelf['features_matrix'].shape[1])
-        logging.info('TF-IDF transforming the features matrix')
-        m_tfidf = sktext.TfidfTransformer().fit_transform(self.shelf['features_matrix'])
-        wrdtf = sum(m_tfidf).toarray()
-        idx = argsort(wrdtf)[0][-keepwords:]
-        data_ms = self.shelf['features_matrix'].tocsc()[:, idx]
-        logging.debug('Feature selection done in %is' % int(time() - t0))
+        data_ms, idx = self._select_features()
 
         logging.info('Running the matrix factorization...')
         t1 = time()
         fctr = Snmf(data_ms, **options)
         fctr_res = fctr()
         logging.info('Matrix factorization done in %is' % int(time() - t1))
-
-        logging.debug('Formatting results...')
+        logging.debug('Extracting results...')
         t2 = time()
+        # TODO: how the fuck does this give H and W ???
+        # Matrix of mixture coefficients array
         rbas = fctr.coef().toarray()
+        # Generate a matrix of 0
         bas = zeros((rbas.shape[0], self.shelf['features_matrix'].shape[1]))
+        # Fill it with rbas it the right places
         bas[:, idx] = rbas
         (H, W) = bas, fctr_res.basis().toarray()
-        logging.debug('Results formatted in %is' % int(time() - t2))
-
-        logging.debug('Assigning topics to each entry...')
-        t3 = time()
-        # Calculate a best topic_id for each document, if too poor, associate -1
-        yv = zeros(W.shape[0])
-        mml = W.mean()
-        counter = dict((i, []) for i in range(-1, options['rank']))
-        for i in range(W.shape[0]):
-            movie_id = self.tinydb.get(eid=i+1)['id']
-            yv[i] = W[i].argmax()
-            if W[i][int(yv[i])] < mml:
-                yv[i] = -1  # Assign topic_id -1 to poorly categorized documents
-            counter[int(yv[i])].append(movie_id)
-        logging.debug('Topics were assigned in %is' % int(time() - t3))
-        # Display and store topics
-        for topic_idx, topic in enumerate(H):
-            _topic = Topic(int(topic_idx), [self.shelf['dictionnary'][i]
-                                            for i in topic.argsort()[:-n_words - 1:-1]])
-            self.shelf['topics'][int(topic_idx)] = _topic
-            logging.info('Topic #%i - %i movies: %s' % (_topic.id, len(counter[_topic.id]), " ".join(_topic.top_words)))
-        logging.info('%i movie(s) were unassigned' % len(counter[-1]))
-        logging.info('Updating database...')
-        t4 = time()
-
-        def assign_topic(element):
-            element['topic_ids'] = [int(yv[element.eid - 1])]
-
-        self.tinydb.update(assign_topic, eids=[i + 1 for i in range(len(self.tinydb))])
-        self.shelf.sync()
-        logging.info('Database updated in %is' % int(time() - t4))
-        return counter
+        logging.debug('Results extracted in %is' % int(time() - t2))
+        return self._assign_topics(H, W, options['rank'], n_words)
 
     def train_classifiers_fullset(self, n_jobs=1, min_amount_relevant=10):
         """
