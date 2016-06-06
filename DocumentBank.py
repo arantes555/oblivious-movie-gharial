@@ -14,6 +14,7 @@ from sklearn.svm import SVC
 from time import time
 from nltk.tokenize import RegexpTokenizer
 from nltk.stem import WordNetLemmatizer
+import config
 
 import warnings
 with warnings.catch_warnings(record=True) as w:
@@ -67,7 +68,10 @@ class Topic:
         return "Topic #%i: %s" % (self.id, top_words)
 
     def __repr__(self):
-        return "#%i" % self.id
+        if config.FULL_TOPICS:
+            return self.__str__()
+        else:
+            return "#%i" % self.id
 
 
 class DocumentBank:
@@ -198,11 +202,14 @@ class DocumentBank:
         mml = W.mean()
         counter = dict((i, []) for i in range(-1, rank))
         for i in range(W.shape[0]):
-            movie_id = self.tinydb.get(eid=i + 1)['id']
+            movie = self.tinydb.get(eid=i + 1)
             yv[i] = W[i].argmax()
             if W[i][int(yv[i])] < mml:
                 yv[i] = -1  # Assign topic_id -1 to poorly categorized documents
-            counter[int(yv[i])].append(movie_id)
+            counter[int(yv[i])].append({
+                'id': movie['id'],
+                'title': movie['title']
+            })
         logging.debug('Topics were assigned in %is' % int(time() - t3))
 
         # Display and store topics

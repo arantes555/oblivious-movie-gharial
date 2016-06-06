@@ -8,15 +8,14 @@ MIN_RELEVANCE = 0.001
 MAX_REVIEWS = maxsize
 
 # Max amount of movies to analyze
-MOVIES_TO_ANALYZE = 15000
+MOVIES_TO_ANALYZE = 1500
 
 # Movies to classify after the model is trained
-MOVIES_TO_CLASSIFY = 1000
+MOVIES_TO_CLASSIFY = 100
 
-# Movies to retrieve
-MOVIES_TO_RETRIEVE = MOVIES_TO_ANALYZE + MOVIES_TO_CLASSIFY
+READ_ALL_THEN_SHUFFLE = True
 
-# Maximum amount of words in the dictionnary
+# Maximum amount of words in the dictionary
 MAX_FEATURES = 1000
 
 # Amount of topics to extract, keep it relatively low
@@ -42,3 +41,5 @@ os.environ['NLTK_DATA'] = NLTK_DATA_DIR
 
 # Amount of parallel jobs the computer can take (core amount x2 with hyper-threading)
 N_JOBS = 8
+
+FULL_TOPICS = True

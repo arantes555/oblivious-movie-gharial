@@ -169,20 +169,26 @@ class AmazonReviewsParser:
         fail = 0
         movies = {}
         n_reviews = 0
-        n_movies_with_title = 0
         not_movies = {}
+        no_title = {}
 
         def log(done=False):
             n_movies = len(movies)
             n_not_movies = len(not_movies)
+            n_no_title = len(no_title)
+            tot_movies = n_movies + n_not_movies + n_no_title
             n_reviews_not_movies = sum(not_movies.values())
-            logging.info(('Done: ' if done else '') + '%i reviews read for %i movies (%i%% with titles,'
-                         ' %i%% of products for %i%% of reviews were not movies), %i failed, in %is.'
+            n_reviews_no_title = sum(no_title.values())
+            tot_reviews = n_reviews + n_reviews_not_movies + n_reviews_no_title
+            logging.info(('Done: ' if done else '') + '%i reviews read for %i movies (Excluded: %i%% (%i%% of reviews) '
+                                                      'No Title + %i%%  (%i%% of reviews) Not Movies), %i failed, in '
+                                                      '%is.'
                          % (n_reviews,
                             n_movies,
-                            n_movies_with_title * 100 / n_movies,
-                            n_not_movies * 100 / (n_movies + n_not_movies),
-                            n_reviews_not_movies * 100 / (n_reviews_not_movies + n_reviews),
+                            n_no_title * 100 / tot_movies,
+                            n_reviews_no_title * 100 / tot_reviews,
+                            n_not_movies * 100 / tot_movies,
+                            n_reviews_not_movies * 100 / tot_movies,
                             fail,
                             time() - t0))
 
@@ -205,12 +211,13 @@ class AmazonReviewsParser:
                             if 'Movies' not in movie_meta['categories'][0]:
                                 not_movies[movie_id] = not_movies[movie_id] + 1 if movie_id in not_movies else 1
                                 raise ParsingError('Not a movie')
+                            if 'title' not in movie_meta:
+                                no_title[movie_id] = no_title[movie_id] + 1 if movie_id in no_title else 1
+                                raise ParsingError('No Title')
                         movies[movie_id] = {
-                            'title': movie_meta['title'] if movie_meta and 'title' in movie_meta else '',
+                            'title': movie_meta['title'] if movie_meta else '',
                             'reviews': []
                         }
-                        if movie_meta and 'title' in movie_meta:
-                            n_movies_with_title += 1
                     movies[movie_id]['reviews'].append({
                         'reviewer_id': review['reviewerID'],
                         'reviewer': review['reviewerName'] if 'reviewerName'

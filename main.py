@@ -71,10 +71,12 @@ def main():
     stop_words.extend(utils.stop_words(config.PROJECT_STOP_WORDS_PATH))
     logging.info('Fetched %i stop words' % len(stop_words))
 
+    n_movies = config.maxsize if config.READ_ALL_THEN_SHUFFLE else config.MOVIES_TO_CLASSIFY + config.MOVIES_TO_ANALYZE
+
     # Read reviews from disk
     n_reviews, movies_reviews = AmazonReviewsParser.from_json(config.AMAZON_REVIEWS_FILE,
                                                               meta=config.METADATA_FILE,
-                                                              max_movies=config.MOVIES_TO_RETRIEVE)
+                                                              max_movies=n_movies)
     movies = [Movie(movie_id, movie['title'], [{
                                    'userID': review['reviewer_id'],
                                    'rating': review['score'],
@@ -86,7 +88,7 @@ def main():
     shuffle(movies)
 
     # Separate movies to add to the bank (and add them to it), and movies to classify afterwards
-    movies_to_analyze = [movie for movie in movies[:-config.MOVIES_TO_CLASSIFY]]
+    movies_to_analyze = [movie for movie in movies[:config.MOVIES_TO_ANALYZE]]
     movies_to_classify = [movie for movie in movies[-config.MOVIES_TO_CLASSIFY:]]
     logging.info('Analyzing %i movies' % len(movies_to_analyze))
     bank.add_documents([movie.serialize() for movie in movies_to_analyze])
@@ -108,7 +110,10 @@ def main():
         movie_topics = [topics[topic_id] for topic_id in
                         bank.classify_document(movie.full_text())]
         for topic in movie_topics:
-            classification_counter[topic.id].append(movie.title)
+            classification_counter[topic.id].append({
+                'id': movie.id,
+                'title': movie.title
+            })
         if len(movie_topics):
             logging.info('Topics for document: %s: %s' % (movie.title, str(movie_topics)))
         else:
