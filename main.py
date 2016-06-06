@@ -74,7 +74,7 @@ def main():
     # Read reviews from disk
     n_reviews, movies_reviews = AmazonReviewsParser.from_json(config.AMAZON_REVIEWS_FILE,
                                                               meta=config.METADATA_FILE,
-                                                              max_reviews=config.MAX_REVIEWS)
+                                                              max_movies=config.MOVIES_TO_RETRIEVE)
     movies = [Movie(movie_id, movie['title'], [{
                                    'userID': review['reviewer_id'],
                                    'rating': review['score'],
@@ -86,10 +86,10 @@ def main():
     shuffle(movies)
 
     # Separate movies to add to the bank (and add them to it), and movies to classify afterwards
-    movies_to_analyze = [movie.serialize() for movie in movies[:-config.MOVIES_TO_CLASSIFY]]
-    movies_to_classify = [movie.serialize() for movie in movies[-config.MOVIES_TO_CLASSIFY:]]
+    movies_to_analyze = [movie for movie in movies[:-config.MOVIES_TO_CLASSIFY]]
+    movies_to_classify = [movie for movie in movies[-config.MOVIES_TO_CLASSIFY:]]
     logging.info('Analyzing %i movies' % len(movies_to_analyze))
-    bank.add_documents(movies_to_analyze)
+    bank.add_documents([movie.serialize() for movie in movies_to_analyze])
 
     # First vectorize the dataset
     bank.vectorize(stop_words=stop_words, max_features=config.MAX_FEATURES)
@@ -106,13 +106,13 @@ def main():
     classification_counter = dict((i, []) for i in range(-1, config.N_TOPICS))
     for movie in movies_to_classify:
         movie_topics = [topics[topic_id] for topic_id in
-                        bank.classify_document(Movie(movie['id'], movie['reviews']).full_text())]
+                        bank.classify_document(movie.full_text())]
         for topic in movie_topics:
-            classification_counter[topic.id].append(movie['id'])
+            classification_counter[topic.id].append(movie.title)
         if len(movie_topics):
-            logging.info('Topics for document: %s: %s' % (movie['id'], str(movie_topics)))
+            logging.info('Topics for document: %s: %s' % (movie.title, str(movie_topics)))
         else:
-            classification_counter[-1].append(movie['id'])
+            classification_counter[-1].append(movie.title)
     for topic in classification_counter.keys():
         logging.info('Topic #%i: %i movies assigned' % (topic, len(classification_counter[topic])))
     logging.info('Managed to classify %i%% of the documents.' %

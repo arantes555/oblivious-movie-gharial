@@ -1,13 +1,20 @@
 import os
+from sys import maxsize
 
 # Minimum relevance (in per cent of the total amount of documents) to accept a classifier
 MIN_RELEVANCE = 0.001
 
-# Amount of reviews to analyse to train the classifiers
-MAX_REVIEWS = 20000
+# Max amount of reviews to retrieve
+MAX_REVIEWS = maxsize
+
+# Max amount of movies to analyze
+MOVIES_TO_ANALYZE = 15000
 
 # Movies to classify after the model is trained
-MOVIES_TO_CLASSIFY = 20
+MOVIES_TO_CLASSIFY = 1000
+
+# Movies to retrieve
+MOVIES_TO_RETRIEVE = MOVIES_TO_ANALYZE + MOVIES_TO_CLASSIFY
 
 # Maximum amount of words in the dictionnary
 MAX_FEATURES = 1000
@@ -19,7 +26,7 @@ N_TOPICS = 20
 N_TOP_WORDS = 15
 
 # Parameter that controls spareness
-BETA = 1e-4
+BETA = 1e+2
 
 AMAZON_REVIEWS_FILE = './resources/Movies_and_TV_5.json'
 

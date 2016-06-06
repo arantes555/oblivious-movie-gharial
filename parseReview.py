@@ -160,9 +160,10 @@ class AmazonReviewsParser:
         return products
 
     @staticmethod
-    def from_json(file, meta=None, max_reviews=sys.maxsize):
+    def from_json(file, meta=None, max_reviews=sys.maxsize, max_movies=sys.maxsize):
         meta = AmazonReviewsParser.parse_metadata(meta) if meta is not None else None
         max_reviews = max_reviews or sys.maxsize
+        max_movies = max_movies or sys.maxsize
         t0 = time()
         last_t = t0
         fail = 0
@@ -188,7 +189,8 @@ class AmazonReviewsParser:
         logging.info('Reading reviews ...')
         with open(file) as f:
             for l in f:
-                if n_reviews >= max_reviews:
+                if n_reviews >= max_reviews \
+                        or len(movies) >= max_movies:
                     break
                 if time() - last_t > 10:
                     last_t = time()
