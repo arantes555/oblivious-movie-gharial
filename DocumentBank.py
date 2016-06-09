@@ -203,11 +203,10 @@ class DocumentBank:
             for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
                 yield self.document_class.load(document).full_text()
 
-        features_matrix = self.shelf['vectorizer'].fit_transform(self.document_class.load(document).full_text()
-                                                                 for document in
-                                                                 sorted(self.tinydb.all(), key=lambda doc: doc.eid))
-
-        self.shelf['features_matrix'] = features_matrix
+        self.shelf['features_matrix'] = self.shelf['vectorizer'].fit_transform(
+            self.document_class.load(document).full_text()
+            for document in
+            sorted(self.tinydb.all(), key=lambda doc: doc.eid))
 
         # Inverse the vectorized vocabulary
         self.shelf['dictionnary'] = self.shelf['vectorizer'].get_feature_names()
@@ -313,19 +312,18 @@ class DocumentBank:
 
         logging.info('Running the matrix factorization...')
         t1 = time()
-        fctr = Snmf(data_ms, **options)
-        fctr_res = fctr()
+        r_snmf = Snmf(data_ms, **options).factorize()
         logging.info('Matrix factorization done in %is' % int(time() - t1))
         logging.debug('Extracting results...')
         t2 = time()
         # TODO: how the fuck does this give H and W ???
         # Matrix of mixture coefficients array
-        rbas = fctr.coef().toarray()
-        # Generate a matrix of 0
-        bas = zeros((rbas.shape[0], self.shelf['features_matrix'].shape[1]))
-        # Fill it with rbas it the right places
-        bas[:, idx] = rbas
-        (H, W) = bas, fctr_res.basis().toarray()
+        partial_H = r_snmf.coef().toarray()
+        # Generate a matrix of 0 with the right shape for H
+        H = zeros((partial_H.shape[0], self.shelf['features_matrix'].shape[1]))
+        # Fill it with partial_H it the right places according to the ids from select_features
+        H[:, idx] = partial_H
+        W = r_snmf.basis().toarray()
         logging.debug('Results extracted in %is' % int(time() - t2))
         return self._assign_topics(H, W, options['rank'], n_words)
 
@@ -385,7 +383,7 @@ class DocumentBank:
         logging.debug('Starting GridSearch on topic id %i ...' % topic_id)
         t0 = time()
         param_grid = [{'C': [0.1, 1, 10, 100], 'kernel': ['linear']}]
-        clf = GridSearchCV(SVC(C=1, class_weight={1: ratio}), param_grid, cv=5, n_jobs=n_jobs)
+        clf = GridSearchCV(SVC(class_weight={1: ratio}), param_grid, cv=5, n_jobs=n_jobs)
         clf.fit(self.shelf['features_matrix'], array(yvc))
         logging.debug('GridSearch on topic id %i done in %is' % (topic_id, int(time() - t0)))
 
