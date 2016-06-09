@@ -10,7 +10,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.metrics import precision_score
 from sklearn.grid_search import GridSearchCV
-from sklearn.svm import SVC
+from sklearn.svm import LinearSVC
 from time import time
 from nltk.tokenize import RegexpTokenizer
 from nltk.stem import WordNetLemmatizer
@@ -196,13 +196,6 @@ class DocumentBank:
                                                    max_features=max_features
                                                    )
 
-        def corpus():
-            """
-            :return: Generator yielding all the documents content
-            """
-            for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
-                yield self.document_class.load(document).full_text()
-
         self.shelf['features_matrix'] = self.shelf['vectorizer'].fit_transform(
             self.document_class.load(document).full_text()
             for document in
@@ -221,19 +214,19 @@ class DocumentBank:
         logging.debug('Selecting features...')
         t0 = time()
         logging.info('TF-IDF transforming the features matrix')
-        m_tfidf = TfidfTransformer().fit_transform(self.shelf['features_matrix'])
-        # TODO: dafuq is this sum ?
-        wrdtf = sum(m_tfidf).toarray()
-        # Keep 1000 words or less # TODO: dafuq ?
-        keepwords = min(1000, self.shelf['features_matrix'].shape[1])
-        # Get the `keepwords` first ids of the sorted wrdftf matrix
-        # TODO: understand precisley what happens here with argsort
-        idx = argsort(wrdtf)[0][-keepwords:]
-        # TODO: Why transforming it into a CSC (compressed by column) instead keeping it a CSR (by rows)...
-        # Only keeping the entries (rows or colums) corresponding to the kept words
-        data_ms = self.shelf['features_matrix'].tocsc()[:, idx]
+        tf_idf_matrix = TfidfTransformer().fit_transform(self.shelf['features_matrix'])
+        # Calculate the global term frequency of each word across all documents
+        word_tf = sum(tf_idf_matrix).toarray()
+        # Keep 1000 words or less
+        keep_words = min(1000, self.shelf['features_matrix'].shape[1])
+        # Sort word_tf and extract the indexes of the `keep_words` (or less) most relevant words
+        ids = argsort(word_tf)[0][-keep_words:]
+        # Transforming matrix to CSC for optimization purposes. We extract specific columns, and it is way mor efficient
+        # to do so on a CSC matrix than a CSR
+        # Only keeping the entries (rows or columns) corresponding to the kept words
+        features_sub_matrix = self.shelf['features_matrix'].tocsc()[:, ids]
         logging.debug('Feature selection done in %is' % int(time() - t0))
-        return data_ms, idx
+        return features_sub_matrix, ids
 
     def _assign_topics(self, H, W, rank, n_words):
         logging.debug('Assigning topics to each entry...')
@@ -308,21 +301,20 @@ class DocumentBank:
         options = default_options
 
         logging.info('Starting topic extraction...')
-        data_ms, idx = self._select_features()
+        features_sub_matrix, ids = self._select_features()
 
         logging.info('Running the matrix factorization...')
         t1 = time()
-        r_snmf = Snmf(data_ms, **options).factorize()
+        r_snmf = Snmf(features_sub_matrix, **options).factorize()
         logging.info('Matrix factorization done in %is' % int(time() - t1))
         logging.debug('Extracting results...')
         t2 = time()
-        # TODO: how the fuck does this give H and W ???
         # Matrix of mixture coefficients array
         partial_H = r_snmf.coef().toarray()
         # Generate a matrix of 0 with the right shape for H
         H = zeros((partial_H.shape[0], self.shelf['features_matrix'].shape[1]))
         # Fill it with partial_H it the right places according to the ids from select_features
-        H[:, idx] = partial_H
+        H[:, ids] = partial_H
         W = r_snmf.basis().toarray()
         logging.debug('Results extracted in %is' % int(time() - t2))
         return self._assign_topics(H, W, options['rank'], n_words)
@@ -340,9 +332,9 @@ class DocumentBank:
             logging.debug('Working on topic #%i out of %i' % (topic_id, len(self.shelf['topics']) - 1))
             yvc = self._generate_yvc(topic_id)
             # Check if enough positives
-            length = len(yvc)  # 2 * (amount of films with topic_id) - amount of films
-            total = sum(yvc)  # amount of films
-            # amount of films with topic_id > min_amount_relevant
+            length = len(yvc)  # amount of films
+            total = sum(yvc)  # 2 * (amount of films with topic_id) - amount of films
+            # amount of documents with topic_id > min_amount_relevant
             if ((total + length) / 2) > min_amount_relevant:
                 t0 = time()
                 logging.debug('Generating classifier for topic #%i' % topic_id)
@@ -382,8 +374,8 @@ class DocumentBank:
         """
         logging.debug('Starting GridSearch on topic id %i ...' % topic_id)
         t0 = time()
-        param_grid = [{'C': [0.1, 1, 10, 100], 'kernel': ['linear']}]
-        clf = GridSearchCV(SVC(class_weight={1: ratio}), param_grid, cv=5, n_jobs=n_jobs)
+        param_grid = [{'C': [0.1, 1, 10, 100]}]
+        clf = GridSearchCV(LinearSVC(class_weight={1: ratio}), param_grid, cv=5, n_jobs=n_jobs)
         clf.fit(self.shelf['features_matrix'], array(yvc))
         logging.debug('GridSearch on topic id %i done in %is' % (topic_id, int(time() - t0)))
 
@@ -414,7 +406,7 @@ class DocumentBank:
         # Produce topic list
         topic_ids = []
         for topic_id in self.shelf['classifiers']:
-            # Use SVC model to classify mail for topic represented by topic_id
+            # Use SVC model to classify document for topic represented by topic_id
             resp = self.shelf['classifiers'][topic_id].predict(vecm)
             if resp > 0:
                 topic_ids.append(topic_id)
