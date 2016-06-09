@@ -188,7 +188,7 @@ class AmazonReviewsParser:
                             n_no_title * 100 / tot_movies,
                             n_reviews_no_title * 100 / tot_reviews,
                             n_not_movies * 100 / tot_movies,
-                            n_reviews_not_movies * 100 / tot_movies,
+                            n_reviews_not_movies * 100 / tot_reviews,
                             fail,
                             time() - t0))
 
