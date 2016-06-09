@@ -63,7 +63,7 @@ def main():
     # Initialization
     start_date = date()
     logger.initialize('.')
-    bank = DocumentBank()
+    bank = DocumentBank(document_class=Movie)
 
     # Fetching stopwords
     logging.info('Fetching stop words')
@@ -78,10 +78,10 @@ def main():
                                                               meta=config.METADATA_FILE,
                                                               max_movies=n_movies)
     movies = [Movie(movie_id, movie['title'], [{
-                                   'userID': review['reviewer_id'],
-                                   'rating': review['score'],
-                                   'review': review['review']
-                               } for review in movie['reviews']])
+                                                   'userID': review['reviewer_id'],
+                                                   'rating': review['score'],
+                                                   'review': review['review']
+                                               } for review in movie['reviews']])
               for movie_id, movie in movies_reviews.items()]
 
     # Shuffle the array, so that the movies to classify at the end aren't biased
@@ -144,11 +144,7 @@ def main():
                         'topic': topics[topic_id].top_words,
                         'training_movies_in_topic': training_counter[topic_id],
                         'classification_movies_in_topic': classification_counter[topic_id]
-                    } for topic_id in topics] + [{
-            'topic': ['No Topic'],
-            'training_movies_in_topic': training_counter[-1],
-            'classification_movies_in_topic': classification_counter[-1]
-        }]
+                    } for topic_id in topics]
     })
     bank.close()
     copyfile('./all.log', './reports/%s.log' % report_filename)

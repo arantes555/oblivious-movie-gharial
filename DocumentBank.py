@@ -15,8 +15,9 @@ from time import time
 from nltk.tokenize import RegexpTokenizer
 from nltk.stem import WordNetLemmatizer
 import config
-
+from abc import ABCMeta, abstractmethod
 import warnings
+
 with warnings.catch_warnings(record=True) as w:
     from nimfa import Snmf
 
@@ -28,7 +29,31 @@ def tokenizer(text):
     return [_stemmer.lemmatize(word) for word in _tokenizer.tokenize(text)]
 
 
-class Movie:
+class Document(metaclass=ABCMeta):
+    @abstractmethod
+    def full_text(self):
+        pass
+
+    @abstractmethod
+    def get_identifier(self):
+        pass
+
+    @abstractmethod
+    def serialize(self):
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def load(json_document):
+        """
+        :param json_document: same input as the serialize method output
+        :type json_document: dict
+        :rtype: Document
+        """
+        pass
+
+
+class Movie(Document):
     def __init__(self, movie_id, title, reviews=None):
         self.id = movie_id
         self.title = title
@@ -50,12 +75,24 @@ class Movie:
     def full_text(self):
         return '\n'.join(self._generate_full_text())
 
+    def get_identifier(self):
+        return {'id': self.id, 'title': self.title}
+
     def serialize(self):
         return {
             'id': self.id,
             'title': self.title,
             'reviews': self.reviews
         }
+
+    @staticmethod
+    def load(json_document):
+        """
+
+        :param json_document: {'id': string, 'title': string, 'reviews': list.<{'rating':string, 'review':string}>
+        :rtype: Movie
+        """
+        return Movie(json_document['id'], json_document['title'], reviews=json_document['reviews'])
 
 
 class Topic:
@@ -80,6 +117,7 @@ class DocumentBank:
     """
 
     def __init__(self,
+                 document_class=Document,
                  shelf_path='./bank.shelf',
                  tinydb_path='./documents.tinydb',
                  reset=True):
@@ -92,6 +130,8 @@ class DocumentBank:
         :param reset: reset the document bank or load it, defaults to True
         :type reset: bool
         """
+        self.document_class = document_class
+
         if reset:
             logging.debug('DocumentBank is set to be reset')
             logging.debug('Removing shelf file if any')
@@ -119,14 +159,14 @@ class DocumentBank:
             self.shelf['classifiers'] = None
             self.shelf.sync()
 
-    def add_document(self, movie):
+    def add_document(self, document):
         """
         Add a single document to the bank
-        :param movie: movie to add
-        :type movie: Movie
+        :param document: document to add
+        :type document: Document
         """
         logging.debug('Inserting single document to tinydb')
-        self.tinydb.insert(movie.serialize())
+        self.tinydb.insert(document.serialize())
 
     def add_documents(self, documents):
         """
@@ -160,10 +200,12 @@ class DocumentBank:
             """
             :return: Generator yielding all the documents content
             """
-            for movie in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
-                yield Movie(movie['id'], movie['title'], movie['reviews']).full_text()
+            for document in sorted(self.tinydb.all(), key=lambda doc: doc.eid):
+                yield self.document_class.load(document).full_text()
 
-        features_matrix = self.shelf['vectorizer'].fit_transform(corpus())
+        features_matrix = self.shelf['vectorizer'].fit_transform(self.document_class.load(document).full_text()
+                                                                 for document in
+                                                                 sorted(self.tinydb.all(), key=lambda doc: doc.eid))
 
         self.shelf['features_matrix'] = features_matrix
 
@@ -202,14 +244,11 @@ class DocumentBank:
         mml = W.mean()
         counter = dict((i, []) for i in range(-1, rank))
         for i in range(W.shape[0]):
-            movie = self.tinydb.get(eid=i + 1)
+            document = self.tinydb.get(eid=i + 1)
             yv[i] = W[i].argmax()
             if W[i][int(yv[i])] < mml:
                 yv[i] = -1  # Assign topic_id -1 to poorly categorized documents
-            counter[int(yv[i])].append({
-                'id': movie['id'],
-                'title': movie['title']
-            })
+            counter[int(yv[i])].append(self.document_class.load(document).get_identifier())
         logging.debug('Topics were assigned in %is' % int(time() - t3))
 
         # Display and store topics
